@@ -1,1 +1,1 @@
-Quantum Info Processing Project
+**Quantum Info Processing Project**

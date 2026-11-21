@@ -25,7 +25,9 @@ The test uses `q0 = (0.01, 0.03, 0.05, 0.11)` and `f = 0.2`. These values are ch
 - It does not model photon-number attacks, detector-control attacks, source leakage, drifting hardware, or a real optical channel.
 - Detecting an abnormal error rate does not identify Eve or prove the key is secure.
 
-For the main comparison, we still need a pooled-error detector, a four-state score test, separate calibration/evaluation data, and power curves at matched false-alarm rates. Thresholds should stay fixed when we test baseline mismatch.
+The notebook now implements pooled QBER, basis-grouped U2, and four-state U4 with separate calibration, cutoff, and evaluation data. It includes terminal and cumulative power curves at a matched nominal false-alarm target. The held-out realized false-alarm rates and fitted state baselines must accompany any reported power comparison.
+
+The QFT section uses a separate density-matrix model of the two-pass protocol. Its private phases are sampled uniformly, check positions and values are refreshed per block, and each Eve's basis persists until a configured redraw. Coalition likelihoods condition on the realized intercept schedule and measurement bases, then integrate over Bob's undisclosed phases with common Monte Carlo samples. These are explicit experiment assumptions because the proposal and cited QFT paper do not fix every timing choice.
 
 ## Background
 

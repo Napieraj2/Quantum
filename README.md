@@ -65,10 +65,12 @@ This is a proposed split for the progress check and should be confirmed by both 
 
 ## Current repository status
 
-- [BB84.ipynb](./BB84.ipynb) is a modular, single-qubit X/H gate-baseline notebook with ideal/hardware modes, optional Aer noise, and result tables/plots. It is not yet the full detector comparison.
+- [BB84.ipynb](./BB84.ipynb) contains the original single-qubit gate baseline, a terminal BB84 detector sweep, cumulative three-look alarms, analytic normal-tail comparisons, and a NumPy density-matrix model of the two-pass QFT repeated-secret experiment.
 - [validation/](./validation/) contains independent checks of BB84 state probabilities and ideal partial intercept-resend QBER.
 - [validation/MODEL_NOTES.md](./validation/MODEL_NOTES.md) records current model assumptions and known omissions.
-- The pooled detector, conditioned score test, independent baseline-calibration experiment, sample-size power study, and analytic-vs-simulated comparison remain planned work.
+- The BB84 study compares pooled QBER, basis-grouped U2, and state-conditioned U4 across the proposed sample sizes, calibration sizes, noise profiles, interception rates, and Eve basis biases. It reports held-out false alarms, power, confidence intervals, first tested 80% power points, and three-look familywise alarms.
+- The QFT section verifies every noiseless two- and four-qubit message, applies the proposal's Pauli channel and sequential Eve instruments on both legs, scores joint check patterns from density matrices, and demonstrates recovery-before-alarm inference over 16 repeated secrets. The complete factorial QFT runner is included but disabled by default because posterior phase integration makes the full grid expensive.
+- The final report still needs high-replication QFT batch results, uncertainty summaries, and the literature comparison with the 2025 six-state and 2026 noisy-BB84 studies.
 - The literature review must first establish how the 2025 six-state and 2026 noisy-BB84 studies overlap with the proposed detectors and experimental design; the project question may change based on that comparison.
 
 Run the existing validation checks from the repository root:

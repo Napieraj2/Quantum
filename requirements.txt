@@ -1,5 +1,8 @@
 qiskit
 matplotlib
+numpy
+pandas
+scipy
 qiskit[visualization]
 qiskit-ibm-runtime
 jupyter

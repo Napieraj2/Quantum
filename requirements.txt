@@ -1,8 +1,11 @@
-qiskit-aer
-matplotlib
-numpy
+# Notebooks and validation
+jupyter
+matplotlib>=3.7
+numpy>=1.24
 pandas
 scipy
+
+# Gate baseline notebook
 qiskit[visualization]
+qiskit-aer
 qiskit-ibm-runtime
-jupyter

@@ -1,9 +1,9 @@
 # Validation
 
-From the repository root:
+Install the shared dependencies and run the tests from the repository root.
 
 ```sh
-python -m pip install -r validation/requirements.txt
+python -m pip install -r requirements.txt
 python -m unittest discover -s validation -p "test_*.py" -v
 ```
 

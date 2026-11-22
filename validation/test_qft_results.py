@@ -1,8 +1,10 @@
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
+from quantum_study.qft_experiment import qft_factorial_config
 from quantum_study.qft_results import build_qft_summary, prepare_qft_results
 
 
@@ -21,6 +23,12 @@ class QFTResultTests(unittest.TestCase):
         self.assertEqual(prepared["setting_key"].nunique(), 1_210)
         self.assertEqual((~prepared["is_attack"]).sum(), 22)
         self.assertEqual(prepared["is_attack"].sum(), 1_188)
+
+    def test_sweep_config_reads_the_live_backend_setting(self):
+        with patch("quantum_study.qft_inference.QFT_GPU_PRECISION", "complex128"):
+            self.assertEqual(
+                qft_factorial_config(100, backend="numpy")["precision"], "complex128",
+            )
 
     def test_outcomes_and_audit_match_saved_run(self):
         summary = build_qft_summary(

@@ -3,11 +3,8 @@ from unittest.mock import patch
 
 import numpy as np
 
-from quantum_study.qft_experiment import (
-    qft_backend_cache,
-    qft_matrix,
-    qft_null_outcome_distribution,
-)
+from quantum_study.qft_inference import qft_backend_cache
+from quantum_study.qft_protocol import qft_matrix, qft_null_outcome_distribution
 from quantum_study.qft_recalibration import (
     _cumulative_residuals,
     _decoded_distribution,

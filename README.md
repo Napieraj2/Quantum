@@ -16,6 +16,8 @@ Set `RUN_RECALIBRATION_DEMO = True` for the 500-attempt Bob-side comparison of f
 
 The QFT posterior uses NumPy on CPU and optionally CuPy on CUDA. Install `requirements-gpu.txt` for CUDA 13.x or substitute `cupy-cuda12x` for CUDA 12.x. Choose `BACKEND = "auto"` for selection with CPU fallback, or `"numpy"` or `"cupy"` explicitly.
 
+The QFT source is organized by [protocol physics](quantum_study/qft_protocol.py), [posterior and backends](quantum_study/qft_inference.py), [trial workflows](quantum_study/qft_trials.py), [sweep and checkpoints](quantum_study/qft_sweep.py), and [model checks](quantum_study/qft_validation.py). Existing imports can use [qft_experiment.py](quantum_study/qft_experiment.py).
+
 ## Study scope
 
 The methods follow §2 of *Detecting Patient Attacks on a Repeated Secret* (Napieraj and Chuang, October 30, 2026). The BB84 notebook compares terminal and cumulative alarms with independent calibration and held-out false alarms. The QFT notebook uses two- and four-qubit exchanges, joint check-pattern likelihoods, and correct 99%-confidence recovery before Bob's first alarm.

@@ -5,16 +5,14 @@ from collections.abc import Mapping
 import numpy as np
 import pandas as pd
 
-from .qft_experiment import (
+from .qft_inference import qft_apply_pauli_channel_batch, qft_backend_cache
+from .qft_protocol import (
     QFT_DEMO_Q_X,
     QFT_DEMO_Q_Z,
     SECRET_BITS,
-    calibrate_bb84_cutoffs,
-    qft_apply_pauli_channel_batch,
-    qft_backend_cache,
     qft_matrix,
-    standardize_look_scores,
 )
+from .qft_trials import calibrate_bb84_cutoffs, standardize_look_scores
 
 
 RECALIBRATION_ATTEMPT_CAP = 500

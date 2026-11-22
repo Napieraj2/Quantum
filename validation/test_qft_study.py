@@ -84,7 +84,6 @@ class QFTStudyTests(unittest.TestCase):
         attempts = 4
         paths = {
             "secret": np.array([0]),
-            "check_count": np.full((1, attempts), 4),
             "bit_posterior": np.array([[
                 [0.1, 0.1, 0.1, 0.1],
                 [0.2, 0.2, 0.2, 0.2],
@@ -94,7 +93,7 @@ class QFTStudyTests(unittest.TestCase):
         }
         alarm_attempt = np.array([2])
         declaration_attempt = np.array([2])
-        summary, alarm_first, correct, declaration_first, _ = _study_rows(
+        summary, alarm_first, correct, declaration_first = _study_rows(
             paths,
             "Joint-check surprisal",
             alarm_attempt,

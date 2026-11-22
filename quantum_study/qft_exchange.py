@@ -13,6 +13,7 @@ import numpy as np
 from scipy.special import logsumexp
 
 
+CHECKS_PER_ATTEMPT = 4
 _TINY = np.finfo(float).tiny
 _NEAR_ONE = 1 - 16 * np.finfo(float).eps
 # Codes 0/1 are Z outcomes, 2/3 are X outcomes, and -1 means no record.
@@ -89,9 +90,9 @@ def _payload_likelihoods(encodings, last_forward, first_return, q_x):
 
 def simulate_paths(
     rng, *, trials, qubits, q_z, q_x, attempts,
-    intercept_probability=0.0, eve_z_probabilities=(),
+    intercept_probability=0.0, eve_z_probabilities=(), include_posterior=True,
 ):
-    """Sample the shared physical paths used to compare Bob's detectors."""
+    """Sample shared physical paths and optionally track Eve's posterior."""
     if not (q_z >= 0 and q_x >= 0 and q_z + q_x <= 1):
         raise ValueError("q_z and q_x must be nonnegative and sum to at most one")
     width = qubits // 2
@@ -104,8 +105,9 @@ def simulate_paths(
     payload_weights = 2 ** np.arange(width - 1, -1, -1)
     payload_index = secret_bits.reshape(16, blocks, width) @ payload_weights
     secret = rng.integers(16, size=trials)
-    log_posterior = np.full((trials, 16), -np.log(16))
-    posterior = np.empty((trials, attempts, 16))
+    if include_posterior:
+        log_posterior = np.full((trials, 16), -np.log(16))
+        posterior = np.empty((trials, attempts, 16))
     errors = np.empty((trials, attempts), dtype=int)
     scores = np.empty((trials, attempts))
     signal_shape = (trials, blocks, qubits)
@@ -151,18 +153,20 @@ def simulate_paths(
         likelihood[likelihood >= _NEAR_ONE] = 1.0
         scores[:, attempt] = -np.log(np.maximum(likelihood, _TINY)).sum(axis=-1)
 
-        record_likelihood = _payload_likelihoods(rotations[candidates], forward, returned, q_x)
-        for block in range(blocks):
-            hypothesis_likelihood = record_likelihood[:, block, payload_index[:, block]]
-            log_posterior += np.log(np.maximum(hypothesis_likelihood, _TINY))
-        log_posterior -= logsumexp(log_posterior, axis=-1, keepdims=True)
-        posterior[:, attempt] = np.exp(log_posterior)
+        if include_posterior:
+            record_likelihood = _payload_likelihoods(rotations[candidates], forward, returned, q_x)
+            for block in range(blocks):
+                hypothesis_likelihood = record_likelihood[:, block, payload_index[:, block]]
+                log_posterior += np.log(np.maximum(hypothesis_likelihood, _TINY))
+            log_posterior -= logsumexp(log_posterior, axis=-1, keepdims=True)
+            posterior[:, attempt] = np.exp(log_posterior)
 
-    return {
+    paths = {
         "secret": secret,
         "check_errors": errors,
-        "check_count": np.full_like(errors, 4),
         "joint_score": scores,
-        "posterior": posterior,
-        "bit_posterior": posterior @ secret_bits,
     }
+    if include_posterior:
+        paths["posterior"] = posterior
+        paths["bit_posterior"] = posterior @ secret_bits
+    return paths

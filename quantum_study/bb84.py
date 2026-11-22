@@ -13,7 +13,6 @@ import pandas as pd
 from scipy.stats import norm
 
 
-STATE_ORDER = ("Z0", "Z1", "X+", "X-")
 DETECTORS = ("Pooled QBER", "Basis U2", "State U4")
 CHECK_BUDGETS = (20, 50, 100)
 LOOK_FRACTIONS = (0.25, 0.5, 1.0)
@@ -51,11 +50,6 @@ class BB84Config:
 
 def bb84_config(preset="quick"):
     """Return the fast notebook preset or the complete proposal grid."""
-    common = dict(
-        check_budgets=CHECK_BUDGETS,
-        look_fractions=LOOK_FRACTIONS,
-        target_false_alarm=0.05,
-    )
     if preset == "quick":
         return BB84Config(
             noise_profiles=(("Erven reference", 0.002, 0.038),),
@@ -67,7 +61,6 @@ def bb84_config(preset="quick"):
             evaluation_trials=3_000,
             cumulative_cutoff_trials=2_000,
             cumulative_evaluation_trials=2_000,
-            **common,
         )
     if preset == "broad":
         return BB84Config(
@@ -83,7 +76,6 @@ def bb84_config(preset="quick"):
             evaluation_trials=5_000,
             cumulative_cutoff_trials=3_000,
             cumulative_evaluation_trials=3_000,
-            **common,
         )
     raise ValueError("preset must be 'quick' or 'broad'")
 

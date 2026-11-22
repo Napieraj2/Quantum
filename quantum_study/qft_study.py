@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from .qft_exchange import simulate_paths
+from .qft_exchange import CHECKS_PER_ATTEMPT, simulate_paths
 
 
 DETECTORS = ("Pooled check errors", "Joint-check surprisal")
@@ -60,7 +60,7 @@ def _first_alarms(values, rule, tie_draws):
 
 def _detector_statistics(paths):
     errors = np.cumsum(np.asarray(paths["check_errors"]), axis=1)
-    checks = np.cumsum(np.asarray(paths["check_count"]), axis=1)
+    checks = CHECKS_PER_ATTEMPT * np.arange(1, errors.shape[1] + 1)
     pooled = errors / checks
     joint = np.cumsum(np.asarray(paths["joint_score"]), axis=1)
     return dict(zip(DETECTORS, (pooled, joint)))
@@ -103,10 +103,7 @@ def _study_rows(
     inconclusive = ~(alarm_first | declaration_first)
     stop_attempt = np.minimum(alarm_attempt, declaration_attempt)
     stop_attempt = np.minimum(stop_attempt, attempts)
-    cumulative_checks = np.cumsum(np.asarray(paths["check_count"]), axis=1)
-    retained_checks = cumulative_checks[
-        np.arange(len(paths["secret"])), stop_attempt - 1
-    ]
+    retained_checks = CHECKS_PER_ATTEMPT * stop_attempt
     blocks_per_attempt = 4 // (block_qubits // 2)
     transmitted_per_attempt = 2 * block_qubits * blocks_per_attempt
 
@@ -124,7 +121,7 @@ def _study_rows(
             stop_attempt * transmitted_per_attempt
         ),
     }
-    return summary, alarm_first, correct, declaration_first, stop_attempt
+    return summary, alarm_first, correct, declaration_first
 
 
 def _curve_rows(
@@ -197,9 +194,7 @@ def run_qft_study(
     ):
         raise ValueError("eve_z_probabilities must lie between zero and one")
 
-    looks = np.unique(np.ceil(
-        attempts * np.asarray((0.25, 0.5, 1.0))
-    ).astype(int))
+    looks = np.ceil(attempts * np.asarray((0.25, 0.5, 1.0))).astype(int)
     fit_root, null_root, attack_root, null_ties, attack_ties = (
         np.random.SeedSequence(seed).spawn(5)
     )
@@ -210,8 +205,8 @@ def run_qft_study(
         q_x=q_x,
         attempts=attempts,
     )
-    fitted_null = simulate_paths(np.random.default_rng(fit_root), **common)
-    heldout_null = simulate_paths(np.random.default_rng(null_root), **common)
+    fitted_null = simulate_paths(np.random.default_rng(fit_root), include_posterior=False, **common)
+    heldout_null = simulate_paths(np.random.default_rng(null_root), include_posterior=False, **common)
     attack = simulate_paths(
         np.random.default_rng(attack_root),
         intercept_probability=intercept_probability,
@@ -244,7 +239,7 @@ def run_qft_study(
 
     summaries, curves = [], []
     for detector in DETECTORS:
-        summary, alarm_first, correct, declaration_first, _ = _study_rows(
+        summary, alarm_first, correct, declaration_first = _study_rows(
             attack, detector, attack_alarms[detector], false_alarms[detector],
             declaration_attempt, declaration_guess, attempts, block_qubits,
         )

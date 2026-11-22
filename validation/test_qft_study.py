@@ -14,6 +14,7 @@ from quantum_study.qft_exchange import (
     _null_decoding_probabilities,
     _payload_likelihoods,
     _rotations,
+    simulate_paths,
 )
 from quantum_study.qft_study import (
     _curve_rows,
@@ -84,6 +85,7 @@ class QFTStudyTests(unittest.TestCase):
         attempts = 4
         paths = {
             "secret": np.array([0]),
+            "final_key_agrees": np.array([True]),
             "bit_posterior": np.array([[
                 [0.1, 0.1, 0.1, 0.1],
                 [0.2, 0.2, 0.2, 0.2],
@@ -122,6 +124,62 @@ class QFTStudyTests(unittest.TestCase):
             block_qubits=2,
         )
         self.assertTrue(all(row["bit_1"] == 0.9 for row in curves))
+
+    def test_accepted_key_exposure_uses_acceptance_denominator(self):
+        attempts = 4
+        paths = {
+            "secret": np.zeros(4, dtype=int),
+            # A later alarm, a final mismatch, an exposed acceptance, and an
+            # accepted session without a declaration, respectively.
+            "final_key_agrees": np.array([True, False, True, True]),
+        }
+        alarm_attempt = np.array([3, 5, 5, 5])
+        declaration_attempt = np.array([2, 2, 2, 5])
+        declaration_guess = np.zeros(4, dtype=int)
+        summary, _, correct, _ = _study_rows(
+            paths,
+            "Joint-check surprisal",
+            alarm_attempt,
+            np.full(4, attempts + 1),
+            declaration_attempt,
+            declaration_guess,
+            attempts,
+            block_qubits=2,
+        )
+        np.testing.assert_array_equal(correct, [True, True, True, False])
+        self.assertEqual(summary["accepted_sessions"], 2)
+        self.assertEqual(summary["exposed_accepted_keys"], 1)
+        self.assertEqual(summary["accepted_key_exposure_rate"], 0.5)
+
+        no_acceptance, *_ = _study_rows(
+            {
+                "secret": paths["secret"][:2],
+                "final_key_agrees": paths["final_key_agrees"][:2],
+            },
+            "Joint-check surprisal",
+            alarm_attempt[:2],
+            np.full(2, attempts + 1),
+            declaration_attempt[:2],
+            declaration_guess[:2],
+            attempts,
+            block_qubits=2,
+        )
+        self.assertEqual(no_acceptance["accepted_sessions"], 0)
+        self.assertEqual(no_acceptance["exposed_accepted_keys"], 0)
+        self.assertTrue(np.isnan(no_acceptance["accepted_key_exposure_rate"]))
+
+    def test_noiseless_final_key_agrees_for_both_block_sizes(self):
+        for qubits in (2, 4):
+            paths = simulate_paths(
+                np.random.default_rng(17),
+                trials=8,
+                qubits=qubits,
+                q_z=0.0,
+                q_x=0.0,
+                attempts=2,
+                include_posterior=False,
+            )
+            self.assertTrue(np.all(paths["final_key_agrees"]))
 
     def test_no_interception_keeps_paired_recovery_uninformed(self):
         for qubits in (2, 4):

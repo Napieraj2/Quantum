@@ -107,6 +107,12 @@ def _study_rows(
     blocks_per_attempt = 4 // (block_qubits // 2)
     transmitted_per_attempt = 2 * block_qubits * blocks_per_attempt
 
+    # Eve's declaration ends first-outcome scoring. Acceptance uses Bob's
+    # alarm result through the final look, including alarms after a declaration.
+    accepted = (alarm_attempt > attempts) & paths["final_key_agrees"]
+    accepted_sessions = int(accepted.sum())
+    exposed_accepted_keys = int((accepted & correct).sum())
+
     summary = {
         "block_qubits": block_qubits,
         "detector": detector,
@@ -119,6 +125,11 @@ def _study_rows(
         "mean_checks": np.mean(retained_checks),
         "mean_transmitted_qubits": np.mean(
             stop_attempt * transmitted_per_attempt
+        ),
+        "accepted_sessions": accepted_sessions,
+        "exposed_accepted_keys": exposed_accepted_keys,
+        "accepted_key_exposure_rate": (
+            exposed_accepted_keys / accepted_sessions if accepted_sessions else np.nan
         ),
     }
     return summary, alarm_first, correct, declaration_first

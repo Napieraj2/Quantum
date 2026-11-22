@@ -92,7 +92,7 @@ def simulate_paths(
     rng, *, trials, qubits, q_z, q_x, attempts,
     intercept_probability=0.0, eve_z_probabilities=(), include_posterior=True,
 ):
-    """Sample shared physical paths and optionally track Eve's posterior."""
+    """Sample shared physical paths, final key agreement, and optionally Eve's posterior."""
     if not (q_z >= 0 and q_x >= 0 and q_z + q_x <= 1):
         raise ValueError("q_z and q_x must be nonnegative and sum to at most one")
     width = qubits // 2
@@ -143,7 +143,8 @@ def simulate_paths(
         cumulative = output_probabilities.cumsum(axis=-1)
         cumulative /= cumulative[..., -1:]
         outcomes = (rng.random((trials, blocks, 1)) > cumulative).sum(axis=-1)
-        observed = np.take_along_axis(block_bits[outcomes], checks, axis=-1)
+        decoded_blocks = block_bits[outcomes]
+        observed = np.take_along_axis(decoded_blocks, checks, axis=-1)
         errors[:, attempt] = (observed != values).sum(axis=(1, 2))
 
         null = _null_decoding_probabilities(phases, candidates, rotations, q_z, q_x)
@@ -161,10 +162,17 @@ def simulate_paths(
             log_posterior -= logsumexp(log_posterior, axis=-1, keepdims=True)
             posterior[:, attempt] = np.exp(log_posterior)
 
+    final_key_agrees = np.zeros(trials, dtype=bool)
+    if attempts:
+        # Drop the check bits and concatenate the final exchange's payload blocks.
+        final_key = np.take_along_axis(decoded_blocks, payload, axis=-1).reshape(trials, 4)
+        final_key_agrees = (final_key == secret_bits[secret]).all(axis=1)
+
     paths = {
         "secret": secret,
         "check_errors": errors,
         "joint_score": scores,
+        "final_key_agrees": final_key_agrees,
     }
     if include_posterior:
         paths["posterior"] = posterior

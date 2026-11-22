@@ -1,4 +1,9 @@
-"""Noiseless, inference-parity, and recovery checks for the QFT model."""
+"""Noiseless, inference-parity, and recovery checks for the QFT model.
+
+The noiseless check exercises the two-pass round trip in Papadopoulos and
+Linvill, §4.1, Eqs. (1)–(3). The parity and recovery checks test this project.
+https://arxiv.org/abs/2404.12507v2
+"""
 
 import numpy as np
 import pandas as pd

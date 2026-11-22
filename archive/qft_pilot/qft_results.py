@@ -18,7 +18,10 @@ RATE_COLUMNS = (
 
 
 def wilson_95(events, trials):
-    """Return vectorized two-sided 95% Wilson score intervals."""
+    """Return two-sided 95% score intervals from Wilson (1927), pp. 209–212.
+
+    https://doi.org/10.1080/01621459.1927.10502953
+    """
     events = np.asarray(events, dtype=float)
     trials = np.asarray(trials, dtype=float)
     rate = events / trials

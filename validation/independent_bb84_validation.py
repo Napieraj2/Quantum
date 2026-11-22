@@ -1,5 +1,10 @@
 """Check BB84 measurement probabilities and intercept-resend error rates.
 
+State preparation and sifting follow Bennett and Brassard, pp. 175–177.
+https://arxiv.org/abs/2003.06557
+The uniform intercept-resend control follows Scarani et al., §I.B.5.
+https://arxiv.org/abs/0802.4155
+
 Run from the repo root:
     python validation/independent_bb84_validation.py
 """

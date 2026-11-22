@@ -1,4 +1,9 @@
-"""Eve's record likelihoods and posterior, with optional CuPy acceleration."""
+"""Eve's record likelihoods and posterior for the proposal's recovery test.
+
+The likelihood uses the two-pass encoding in Papadopoulos and Linvill,
+§4.1, Eqs. (1)–(2). Phase sampling and CPU/GPU batching are pilot choices.
+https://arxiv.org/abs/2404.12507v2
+"""
 
 from __future__ import annotations
 

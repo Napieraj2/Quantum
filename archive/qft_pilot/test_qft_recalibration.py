@@ -3,9 +3,9 @@ from unittest.mock import patch
 
 import numpy as np
 
-from quantum_study.qft_inference import qft_backend_cache
-from quantum_study.qft_protocol import qft_matrix, qft_null_outcome_distribution
-from quantum_study.qft_recalibration import (
+from archive.qft_pilot.qft_inference import qft_backend_cache
+from archive.qft_pilot.qft_protocol import qft_matrix, qft_null_outcome_distribution
+from archive.qft_pilot.qft_recalibration import (
     _cumulative_residuals,
     _decoded_distribution,
     _sample_check_scores,
@@ -54,7 +54,7 @@ class QFTRecalibrationTests(unittest.TestCase):
 
     def test_demo_uses_paired_noise_through_attempt_500(self):
         with patch(
-            "quantum_study.qft_recalibration._sample_check_scores",
+            "archive.qft_pilot.qft_recalibration._sample_check_scores",
             wraps=_sample_check_scores,
         ) as sampler:
             _, curves = run_qft_recalibration_demo(trials=2, calibration_trials=3)

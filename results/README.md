@@ -1,4 +1,4 @@
-# QFT factorial pilot
+# Historical QFT factorial pilot
 
 The [saved CSV](qft_factorial_results.csv) has one row per setting. It contains 1,210 distinct settings, with 100 trials per setting. The [run manifest](qft_factorial_run_manifest.json) records the source commit, RTX 5090 configuration, runtime, and checksums. The resumable checkpoint is local and excluded from Git.
 
@@ -12,8 +12,10 @@ The [saved CSV](qft_factorial_results.csv) has one row per setting. It contains 
 
 In an attack setting, `alarm_rate` measures alarms before recovery or the budget. The two recovery columns distinguish correct and incorrect declarations. The remaining fraction reached the budget with neither outcome. In a noise-only setting, `alarm_rate` is the probability of any false alarm across the looks, and `eve_p_z` and `redraw_probability` are placeholders.
 
-The [QFT notebook](../QFT_Repeated_Secret.ipynb) loads the CSV, checks grid completeness, and plots it by default. Full reproduction is optional and supports checkpoint resume.
+The [archived pilot notebook](../archive/qft_pilot/QFT_Factorial_Pilot.ipynb) loads and plots this CSV. It supports checkpoint resume for reproduction. The [active QFT notebook](../QFT_Repeated_Secret.ipynb) runs the focused paired experiment with exact phase averaging.
 
 ## Scope
 
-This pilot used one joint-pattern alarm, fixed noise within a setting, and a cap of 100 retained checks (25 attempts). The proposal's 100-attempt recovery horizon and comparison of detector choices within QFT still need evaluation. The separate drift demo measures Bob's alarms over 500 attempts using seeded, bounded, time-correlated channel rates. The saved sweep contains setting means, so trial-level cost, confidence, and partial-recovery trajectories cannot be recovered from it.
+This pilot used one joint-pattern alarm, fixed noise within a setting, and a cap of 100 retained checks (25 attempts). The separate drift demo measures Bob's alarms over 500 attempts using seeded, bounded, time-correlated channel rates. The saved sweep contains setting means.
+
+The pilot's 16-sample phase approximation can make an Eve observation from the return leg alone appear informative about the secret. The active comparison uses the exact phase average and a separate 100-attempt schedule. Its figures describe the selected configuration. [Archived posterior calculation](../archive/qft_pilot/qft_inference.py) · [Current exchange](../quantum_study/qft_exchange.py)

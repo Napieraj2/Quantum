@@ -1,36 +1,34 @@
 # Model notes
 
-## What the code represents
+## Proposal deliverables
 
-Alice sends one of four BB84 states: `Z0`, `Z1`, `X+`, or `X-`. Bob randomly measures in Z or X. They only compare rounds where their bases match.
+*Detecting Patient Attacks on a Repeated Secret* (Napieraj and Chuang, October 30, 2026, `QFT_QKD_With_Multiple_Eves.pdf`) specifies the methods in §2 and the project outputs in §3.
 
-Eve uses a partial intercept-resend attack. She intercepts a signal with probability `f`, picks Z or X with equal probability, measures, and sends Bob the corresponding state. If she picks the wrong basis, Bob has a 50% chance of a bit error even when he picked Alice's correct basis. So the ideal attack-only sifted QBER is:
+| Week | Output | Where to see it |
+| --- | --- | --- |
+| 1 | Circuit probabilities | The QFT exchange calculates Bob's check-pattern probabilities. The validation tests check circuit and inference invariants. |
+| 2 | BB84 power and false alarms | [BB84](../BB84.ipynb) plots terminal and cumulative results. The independent control checks sifted `f/4` using 400,000 transmitted rounds per setting. |
+| 3 | QFT recovery | [QFT Repeated Secret](../QFT_Repeated_Secret.ipynb) compares two detectors on shared transmissions over 100 attempts. It plots recovery, false alarms, and confidence in each bit. |
+| 4 | Noise, schedules and hardware | The QFT configuration supports different fixed noise rates and the default uses independently redrawn bases. [Gate Baseline](../Gate_Baseline.ipynb) is hardware setup with a local Aer default. The archived pilot preserves its basis-redraw sweep and separate Bob-only drift demo. |
+| 5 | Figures and report | The notebooks produce figures for selected settings. The QFT study also reports mean transmissions and retained checks. Broader sensitivity runs and final report figures are separate work. |
+| 6 | Presentation and rehearsal | Project work outside the notebook runs. |
 
-`P(error) = f * (1/2) * (1/2) = f/4`
+## Active files
 
-The first 1/2 is Eve picking the wrong basis. The second 1/2 is Bob getting the wrong bit after Eve resends from that basis. There is no extra 1/2 for sifting because QBER is measured **after** sifting.
+| File | Proposal output or role | Source |
+| --- | --- | --- |
+| [BB84.ipynb](../BB84.ipynb) and [bb84.py](../quantum_study/bb84.py) | Week 2. Paired terminal and cumulative QBER, U2, and U4 power with held-out false alarms. | Bennett and Brassard provide the preparations, Lo et al. motivate basis grouping, Lee et al. inform the normal approximation, and proposal §2 defines the scores and calibration. [Notebook references](../BB84.ipynb#references) |
+| [QFT_Repeated_Secret.ipynb](../QFT_Repeated_Secret.ipynb) and [qft_study.py](../quantum_study/qft_study.py) | Weeks 3 and 5. The paired recovery experiment, outcomes, and figures. | Proposal §2 supplies the repeated secret, recovery threshold, and independent calibration. The attempt-level alarm schedule and block surprisal are project choices. |
+| [qft_exchange.py](../quantum_study/qft_exchange.py) | Weeks 1 and 3. Circuit, check likelihoods, and Eve's pooled record likelihood. | The two-pass circuit follows [Papadopoulos and Linvill, §4.1, Fig. 2, Eqs. (1)–(3), and §6.1](https://arxiv.org/abs/2404.12507v2). [Erven et al., §4](https://arxiv.org/abs/0901.0960v2) supplies the reference rates. Proposal §2 defines the Pauli model and pooled records. |
+| [Gate_Baseline.ipynb](../Gate_Baseline.ipynb) | Week 4 setup. X/H round trips and same-state controls. | The four preparations and measurements follow Bennett and Brassard, pp. 175–177. The control design and synthetic noise rates are project choices. [Gate references](../Gate_Baseline.ipynb#interpretation-and-sources) |
+| [quantum_study/__init__.py](../quantum_study/__init__.py) | Python package setup for the notebook imports. | Python package infrastructure. |
+| [independent_bb84_validation.py](independent_bb84_validation.py) and [test_bb84_validation.py](test_bb84_validation.py) | §3 completed control and Week 2 validation. State probabilities, sifting, and ideal intercept-resend. | [Bennett and Brassard, pp. 175–177](https://arxiv.org/abs/2003.06557) and [Scarani et al., §I.B.5](https://arxiv.org/abs/0802.4155). |
+| [test_qft_study.py](test_qft_study.py) | Weeks 1 and 3 validation. Scientific regression checks for the current QFT experiment. | The circuit reference and proposal outcome rules used by the QFT study. |
 
-## Adding unequal baseline errors
+The [archive inventory](../archive/README.md) and the [archived QFT pilot](../archive/qft_pilot/README.md) cover superseded implementations and follow-up work.
 
-The second run uses different no-attack error rates for the four prepared states. After Bob's ideal measurement, his decoded bit is flipped independently with probability `q0_s`. If the attack error and the baseline flip both occur, they cancel. That gives:
+## Reading the results
 
-`q_s(f) = q0_s + (1 - 2*q0_s)*f/4`
-
-The test uses `q0 = (0.01, 0.03, 0.05, 0.11)` and `f = 0.2`. These values are chosen to exercise an unequal-baseline case; they are not measurements from a device. This is a simple classical flip model, not a general model of quantum hardware noise.
-
-## Where this stops
-
-- The ideal QBER figure uses zero baseline errors. It doesn't compare the two detectors.
-- The main detector study fixes the total disclosed-check budget and shares the same sampled state counts across detectors.
-- It does not model photon-number attacks, detector-control attacks, source leakage, drifting hardware, or a real optical channel.
-- Detecting an abnormal error rate does not identify Eve or prove the key is secure.
-
-The notebook now implements pooled QBER, basis-grouped U2, and four-state U4 with separate calibration, cutoff, and evaluation data. It includes terminal and cumulative power curves at a matched nominal false-alarm target. The held-out realized false-alarm rates and fitted state baselines must accompany any reported power comparison.
-
-The [QFT repeated-secret notebook](../QFT_Repeated_Secret.ipynb) uses a separate density-matrix model of the two-pass protocol. Its private phases are sampled uniformly, check positions and values are refreshed per block, and each Eve's basis persists until a configured redraw. Coalition likelihoods condition on the realized intercept schedule and measurement bases, then integrate over Bob's undisclosed phases with common Monte Carlo samples. These are explicit experiment assumptions because the proposal and cited QFT paper do not fix every timing choice.
-
-## Background
-
-- Bennett and Brassard, "Quantum cryptography: Public key distribution and coin tossing" (1984), https://arxiv.org/pdf/2003.06557 - BB84 and basis sifting.
-- Scarani et al., "The security of practical quantum key distribution" (2009), https://arxiv.org/pdf/0802.4155 - assumptions and practical-security limits.
-- Lee et al., "Analysis on eavesdropper detection in BB84 quantum key distribution protocol against partial intercept-and-resend attack" (2023), https://dl.ifip.org/db/conf/ondm/ondm2023/1570879964.pdf - partial-interception detection context.
+- **BB84.** With uniform Eve bases, sifted attack-only QBER is `f/4`. The project combines background bit flips and attack errors as `q + (1 - 2q) × attack_error`. Equal true rates within each basis make true-rate U2 and U4 coincide. The curves show realized false alarms at zero interception. Wilson intervals describe Monte Carlo uncertainty. The sharp Bernoulli bounds in [Mannalath et al.](https://arxiv.org/abs/2410.04095) remain outside these runs.
+- **QFT.** Each attempt yields four fresh checks. Bob looks after 25%, 50%, and 100% of the configured attempt cap. Each detector targets a 5% chance of any alarm across those looks, and the figure shows its independent held-out rate. The joint detector scores the disclosed check pattern within each block. A correct declaration requires at least 99% posterior confidence before Bob's alarm. The exact Eve likelihood starts from the uniform phase mixture and uses the measurement records from both legs. The default is a focused comparison at one noise and attack setting.
+- **Historical pilot.** The old run ended at 100 retained checks, after 25 attempts. Its posterior used sampled phase averages, and the separate 500-attempt drift demo tracked Bob's alarms alone. [Pilot limitations](../results/README.md#scope)

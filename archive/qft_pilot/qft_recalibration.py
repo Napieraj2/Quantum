@@ -1,4 +1,9 @@
-"""Bob-side QFT alarm demonstration with changing channel noise."""
+"""Follow-up demonstration of Bob's alarms under drifting channel noise.
+
+The circuit uses Papadopoulos and Linvill, §4.1. The drift and adaptive
+baseline updates are project choices outside the proposal recovery test.
+https://arxiv.org/abs/2404.12507v2
+"""
 
 from collections.abc import Mapping
 

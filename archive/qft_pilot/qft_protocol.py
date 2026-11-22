@@ -1,4 +1,13 @@
-"""Two-pass QFT states, channel dynamics, and Bob's check probabilities."""
+"""Two-pass QFT states, channel dynamics, and Bob's check probabilities.
+
+Scrambling, encoding, and decoding follow Papadopoulos and Linvill, §4.1,
+Fig. 2 and Eqs. (1)–(3). Hidden checks use the layout in §6.1.
+https://arxiv.org/abs/2404.12507v2
+
+Proposal §2 defines the per-leg Pauli channel and repeated-secret exchange.
+Erven et al., §4, supply the reference rates (0.002, 0.038).
+https://arxiv.org/abs/0901.0960v2
+"""
 
 import numpy as np
 

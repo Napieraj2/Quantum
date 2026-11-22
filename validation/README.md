@@ -1,6 +1,6 @@
-# BB84 intercept-resend check
+# BB84 and QFT result checks
 
-This folder checks the BB84 error model before we compare the two detectors. It covers the four states, Z/X measurements, and a partial intercept-resend attack.
+This folder checks the BB84 error model and audits the committed QFT factorial result. The BB84 checks cover the four states, Z/X measurements, and a partial intercept-resend attack. The QFT checks verify that all 1,210 saved settings are unique and complete, outcome probabilities close, and headline event counts match the preserved run manifest.
 
 ## Run it
 
@@ -37,6 +37,7 @@ For the ideal intercept-resend run:
 
 - `independent_bb84_validation.py` - runs the checks and writes the outputs.
 - `test_bb84_validation.py` - tests the measurement table and the simulation logic.
+- `test_qft_results.py` - validates the saved QFT result grid and dashboard outcomes.
 - `results/bb84_ideal_validation.png` - theory vs simulation; this is the Figure 1 check for the progress report.
 - `results/intercept_resend_ideal.csv` - simulated and expected QBER for each `f`.
 - `results/eight_case_probabilities.csv` - Z/X probabilities for each prepared state.

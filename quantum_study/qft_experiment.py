@@ -84,8 +84,6 @@ class BackendStatus:
 
 
 cp = None
-QFT_CUPY_DEVICE_COUNT = 0
-QFT_CUPY_AVAILABLE = False
 QFT_CUPY_IMPORT_ERROR = None
 QFT_ARRAY_MODULE = np
 QFT_SELECTED_BACKEND = "numpy"
@@ -97,7 +95,7 @@ def configure_qft_backend(
     """Select NumPy or probe and select CuPy without import-time side effects."""
     global cp
     global QFT_ARRAY_MODULE, QFT_SELECTED_BACKEND, QFT_GPU_PRECISION
-    global QFT_CUPY_AVAILABLE, QFT_CUPY_DEVICE_COUNT, QFT_CUPY_IMPORT_ERROR
+    global QFT_CUPY_IMPORT_ERROR
 
     if requested not in ("auto", "numpy", "cupy"):
         raise ValueError("QFT backend must be 'auto', 'numpy', or 'cupy'")
@@ -130,8 +128,6 @@ def configure_qft_backend(
         if isinstance(device_name, bytes):
             device_name = device_name.decode()
     except Exception as error:
-        QFT_CUPY_AVAILABLE = False
-        QFT_CUPY_DEVICE_COUNT = 0
         QFT_CUPY_IMPORT_ERROR = error
         if requested == "cupy":
             raise RuntimeError(
@@ -142,8 +138,6 @@ def configure_qft_backend(
         return BackendStatus("numpy", np, "complex128", None, 0)
 
     cp = cupy_module
-    QFT_CUPY_AVAILABLE = True
-    QFT_CUPY_DEVICE_COUNT = device_count
     QFT_CUPY_IMPORT_ERROR = None
     QFT_ARRAY_MODULE = cp
     QFT_SELECTED_BACKEND = "cupy"
@@ -168,7 +162,7 @@ def qft_get_backend(requested=None):
         raise ValueError(
             "QFT backend must be 'auto', 'numpy', 'cupy', or BackendStatus"
         )
-    if QFT_CUPY_AVAILABLE and QFT_SELECTED_BACKEND == "cupy":
+    if cp is not None and QFT_SELECTED_BACKEND == "cupy":
         return cp, "cupy"
     if requested == "auto" and QFT_CUPY_IMPORT_ERROR is not None:
         return np, "numpy"
@@ -557,14 +551,6 @@ def qft_record_likelihoods_batched(
         phase_samples[None, :, :],
         array_module=array_module,
     )[0]
-
-
-def qft_record_likelihood(
-    qubits, message, records, q_z, q_x, phase_samples
-):
-    return float(qft_record_likelihoods_batched(
-        qubits, [message], records, q_z, q_x, phase_samples
-    )[0])
 
 
 def apply_fixed_eve_records(density, records, leg, qubits):

@@ -21,7 +21,7 @@ The test uses `q0 = (0.01, 0.03, 0.05, 0.11)` and `f = 0.2`. These values are ch
 ## Where this stops
 
 - The ideal QBER figure uses zero baseline errors. It doesn't compare the two detectors.
-- The simulation randomly generates the four state counts. The main detector study needs a fixed disclosed-bit budget `m` and specified counts `m_s` for a fair comparison.
+- The main detector study fixes the total disclosed-check budget and shares the same sampled state counts across detectors.
 - It does not model photon-number attacks, detector-control attacks, source leakage, drifting hardware, or a real optical channel.
 - Detecting an abnormal error rate does not identify Eve or prove the key is secure.
 

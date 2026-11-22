@@ -1,5 +1,6 @@
 -r requirements.txt
 
-# Optional CUDA backend for the QFT posterior. Install a build matching the
-# local NVIDIA CUDA driver/toolkit.
-cupy-cuda12x
+# Optional CUDA backend for the QFT posterior. This project machine uses an
+# RTX 5090 with CUDA Toolkit 13.x. Install exactly one CuPy CUDA distribution;
+# CUDA 12.x systems should substitute cupy-cuda12x.
+cupy-cuda13x

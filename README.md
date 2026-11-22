@@ -13,6 +13,12 @@ Run each notebook from the repository root in a fresh kernel.
 | [QFT_Repeated_Secret.ipynb](./QFT_Repeated_Secret.ipynb) | The saved QFT sweep, its interpretation, and optional simulation and reproduction |
 | [Gate_Baseline.ipynb](./Gate_Baseline.ipynb) | Optional single-qubit gate and readout checks in Qiskit Aer |
 
+### Proposal and current QFT baseline
+
+The scope comes from §2 of *Detecting Patient Attacks on a Repeated Secret* (Andrew Napieraj and Ian Chuang, ECSE 6969, October 30, 2026). The BB84 study compares pooled QBER, U2, and U4 on the same checks with independent calibration and held-out false-alarm estimates. The QFT study uses two- and four-qubit blocks, the stated channel and Eve settings, joint check-pattern likelihoods, and correct 99%-confidence recovery before Bob's first alarm. CUDA accelerates the same posterior calculation used on CPU.
+
+The saved QFT run uses a common interception rate across Eves and a single joint-pattern alarm. Its cap of 100 retained checks amounts to 25 attempts. The proposal calls for up to 100 attempts. A proposal-complete run needs to specify the check schedule over that horizon and how to compare detector choices in the QFT exchange. [Saved run notes](./results/README.md)
+
 ## Project question
 
 The initial question was whether a detector that accounts for errors separately across the four BB84 states detects partial intercept-resend attacks with greater statistical power than a pooled-QBER detector when no-attack error rates differ by state. Recent closely related papers mean the scope and novelty of this comparison are **provisional** until we review their methods and results.

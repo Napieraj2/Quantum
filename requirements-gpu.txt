@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# Optional CUDA backend for the QFT posterior. Install a build matching the
+# local NVIDIA CUDA driver/toolkit.
+cupy-cuda12x

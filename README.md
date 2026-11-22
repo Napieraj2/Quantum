@@ -69,7 +69,7 @@ This is a proposed split for the progress check and should be confirmed by both 
 - [validation/](./validation/) contains independent checks of BB84 state probabilities and ideal partial intercept-resend QBER.
 - [validation/MODEL_NOTES.md](./validation/MODEL_NOTES.md) records current model assumptions and known omissions.
 - The BB84 study compares pooled QBER, basis-grouped U2, and state-conditioned U4 across the proposed sample sizes, calibration sizes, noise profiles, interception rates, and Eve basis biases. It reports held-out false alarms, power, confidence intervals, first tested 80% power points, and three-look familywise alarms.
-- The QFT section verifies every noiseless two- and four-qubit message, applies the proposal's Pauli channel and sequential Eve instruments on both legs, scores joint check patterns from density matrices, and demonstrates recovery-before-alarm inference over 16 repeated secrets. The complete factorial QFT runner is included but disabled by default because posterior phase integration makes the full grid expensive.
+- The QFT section verifies every noiseless two- and four-qubit message, applies the proposal's Pauli channel and sequential Eve instruments on both legs, scores joint check patterns from density matrices, and demonstrates recovery-before-alarm inference over 16 repeated secrets. The complete factorial QFT runner is included but disabled by default because posterior phase integration makes the full grid expensive. Its posterior supports an optional CuPy/CUDA backend with NumPy fallback, and the full runner checkpoints completed calibrations and settings so interrupted jobs can resume safely.
 - The final report still needs high-replication QFT batch results, uncertainty summaries, and the literature comparison with the 2025 six-state and 2026 noisy-BB84 studies.
 - The literature review must first establish how the 2025 six-state and 2026 noisy-BB84 studies overlap with the proposed detectors and experimental design; the project question may change based on that comparison.
 
@@ -80,6 +80,14 @@ python -m pip install -r validation/requirements.txt
 python validation/independent_bb84_validation.py
 python -m unittest discover -s validation -p "test_*.py" -v
 ```
+
+For optional NVIDIA GPU acceleration of the QFT posterior, install the CUDA-specific environment before opening the notebook:
+
+```powershell
+python -m pip install -r requirements-gpu.txt
+```
+
+The notebook selects CuPy automatically when a CUDA device is visible. Set `QFT_COMPUTE_BACKEND = "numpy"` to force the CPU implementation, or `"cupy"` to require CUDA and fail instead of falling back.
 
 ## References
 

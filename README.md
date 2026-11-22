@@ -11,7 +11,7 @@ python -m pip install -r requirements.txt
 python -m jupyterlab
 ```
 
-Open each notebook in a fresh Python kernel.
+Open each notebook in a fresh Python kernel. Set the run options in the first code cell, then run the notebook top to bottom.
 
 | Notebook | Purpose | Where the code lives |
 | --- | --- | --- |

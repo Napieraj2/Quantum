@@ -27,7 +27,7 @@ The test uses `q0 = (0.01, 0.03, 0.05, 0.11)` and `f = 0.2`. These values are ch
 
 The notebook now implements pooled QBER, basis-grouped U2, and four-state U4 with separate calibration, cutoff, and evaluation data. It includes terminal and cumulative power curves at a matched nominal false-alarm target. The held-out realized false-alarm rates and fitted state baselines must accompany any reported power comparison.
 
-The QFT section uses a separate density-matrix model of the two-pass protocol. Its private phases are sampled uniformly, check positions and values are refreshed per block, and each Eve's basis persists until a configured redraw. Coalition likelihoods condition on the realized intercept schedule and measurement bases, then integrate over Bob's undisclosed phases with common Monte Carlo samples. These are explicit experiment assumptions because the proposal and cited QFT paper do not fix every timing choice.
+The [QFT repeated-secret notebook](../QFT_Repeated_Secret.ipynb) uses a separate density-matrix model of the two-pass protocol. Its private phases are sampled uniformly, check positions and values are refreshed per block, and each Eve's basis persists until a configured redraw. Coalition likelihoods condition on the realized intercept schedule and measurement bases, then integrate over Bob's undisclosed phases with common Monte Carlo samples. These are explicit experiment assumptions because the proposal and cited QFT paper do not fix every timing choice.
 
 ## Background
 

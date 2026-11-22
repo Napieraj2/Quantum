@@ -1,7 +1,17 @@
-# Comparing Eavesdropping Detection Methods in BB84
+# Quantum eavesdropping detection studies
 
 **ECSE 6969 final project**
 **Team:** Ian Chuang and Andrew Napieraj
+
+## Choose a notebook
+
+Run each notebook from the repository root in a fresh kernel.
+
+| Notebook | Start here for |
+| --- | --- |
+| [BB84.ipynb](./BB84.ipynb) | Pooled QBER, U2, and U4 detector performance, including terminal and cumulative alarms |
+| [QFT_Repeated_Secret.ipynb](./QFT_Repeated_Secret.ipynb) | The saved QFT sweep, its interpretation, and optional simulation and reproduction |
+| [Gate_Baseline.ipynb](./Gate_Baseline.ipynb) | Optional single-qubit gate and readout checks in Qiskit Aer |
 
 ## Project question
 
@@ -51,7 +61,7 @@ For each fixed number `m` of sifted bits, report empirical false-alarm rate and 
 | Baseline knowledge | Known rates versus rates estimated from independent calibration samples |
 | Statistical calibration | Realized false-alarm rate and power at each sample size, with matched thresholds |
 
-The controlled simulator is not a general quantum hardware noise model. The notebook's optional Aer noise is a separate gate/readout-level circuit experiment; the detector study's state-conditioned flip model will be described as such and validated independently.
+The detector study uses a state-conditioned flip model with independent validation. The optional gate baseline uses a separate Aer gate/readout noise model.
 
 ## Proposed team responsibilities
 
@@ -65,11 +75,10 @@ This is a proposed split for the progress check and should be confirmed by both 
 
 ## Current repository status
 
-- [BB84.ipynb](./BB84.ipynb) contains the original single-qubit gate baseline, a terminal BB84 detector sweep, cumulative three-look alarms, analytic normal-tail comparisons, and a NumPy density-matrix model of the two-pass QFT repeated-secret experiment.
 - [validation/](./validation/) contains independent checks of BB84 state probabilities, ideal partial intercept-resend QBER, and the saved QFT result grid.
 - [validation/MODEL_NOTES.md](./validation/MODEL_NOTES.md) records current model assumptions and known omissions.
 - The BB84 study compares pooled QBER, basis-grouped U2, and state-conditioned U4 across the proposed sample sizes, calibration sizes, noise profiles, interception rates, and Eve basis biases. It reports held-out false alarms, power, confidence intervals, first tested 80% power points, and three-look familywise alarms.
-- The QFT section verifies every noiseless two- and four-qubit message, applies the proposal's Pauli channel and sequential Eve instruments on both legs, scores joint check patterns from density matrices, and demonstrates recovery-before-alarm inference over 16 repeated secrets. The completed 1,210-setting CUDA sweep is saved at [results/qft_factorial_results.csv](./results/qft_factorial_results.csv); the notebook loads it without rerunning the batch. Its posterior supports an optional CuPy/CUDA backend with NumPy fallback, and the runner checkpoints completed calibrations and settings so interrupted jobs can resume safely.
+- The QFT notebook loads the [completed 1,210-setting CUDA sweep](./results/qft_factorial_results.csv) by default. Its optional validation and demo exercise the two-pass model, joint check scores, sequential Eves, and inference over 16 candidate secrets. The [QFT experiment module](./quantum_study/qft_experiment.py) handles CPU/CUDA selection and checkpointed reproduction.
 - The final report still needs QFT horizon/threshold/phase-convergence sensitivity checks, more stable false-alarm calibration, trial-level cost uncertainty, and the literature comparison with the 2025 six-state and 2026 noisy-BB84 studies. The completed baseline observed no 99%-confidence recovery declaration under the current 100-check horizon.
 - The literature review must first establish how the 2025 six-state and 2026 noisy-BB84 studies overlap with the proposed detectors and experimental design; the project question may change based on that comparison.
 
@@ -87,7 +96,7 @@ For optional NVIDIA GPU acceleration of the QFT posterior, install the CUDA-spec
 python -m pip install -r requirements-gpu.txt
 ```
 
-The default GPU requirements target CUDA Toolkit 13.x on the project RTX 5090. CUDA 12.x systems should install `cupy-cuda12x` instead, and only one CuPy CUDA distribution should be present. The notebook selects CuPy only after a representative matrix-operation probe succeeds. Set `QFT_COMPUTE_BACKEND = "numpy"` to force the CPU implementation, or `"cupy"` to require CUDA and fail instead of falling back.
+The default GPU requirements target CUDA Toolkit 13.x on the project RTX 5090. CUDA 12.x systems use `cupy-cuda12x`. Install one CuPy CUDA distribution in the environment. The QFT notebook's optional simulation selects CuPy after a representative matrix-operation probe succeeds. Set `BACKEND = "numpy"` for CPU execution or `BACKEND = "cupy"` to require CUDA.
 
 ## References
 
@@ -95,6 +104,6 @@ The default GPU requirements target CUDA Toolkit 13.x on the project RTX 5090. C
 2. V. Scarani et al., “The security of practical quantum key distribution,” *Reviews of Modern Physics*, 81, 1301 (2009), [arXiv:0802.4155v3](https://arxiv.org/abs/0802.4155v3).
 3. H.-K. Lo, H. F. Chau, and M. Ardehali, “Efficient quantum key distribution scheme and proof of its unconditional security,” *Journal of Cryptology*, 18, 133–165 (2005), [arXiv:quant-ph/0011056](https://arxiv.org/abs/quant-ph/0011056).
 4. C.-H. F. Fung, K. Tamaki, B. Qi, H.-K. Lo, and X. Ma, “Security proof of quantum key distribution with detection efficiency mismatch,” *Quantum Information and Computation*, 9, 0131–0165 (2009), [arXiv:0802.3788](https://arxiv.org/abs/0802.3788).
-5. T. Lee et al., “Analysis on eavesdropper detection in BB84 quantum key distribution protocol against partial intercept-and-resend attack” (2023), [paper PDF](https://dl.ifip.org/db/conf/ondm/ondm2023/1570879964.pdf).
+5. C. Lee, E. Lee, and W. Lee, “Analysis on eavesdropper detection in BB84 quantum key distribution protocol against partial intercept-and-resend attack” (2023), [paper PDF](https://dl.ifip.org/db/conf/ondm/ondm2023/1570879964.pdf).
 6. F. Fiorini, R. G. Garroppo, M. Pagano, and R. Schiavini Yadzhak, “Eavesdropper Detection in Six-State Protocol Against Partial Intercept–Resend Attack,” *Future Internet*, 17(11), 500 (2025), [doi:10.3390/fi17110500](https://doi.org/10.3390/fi17110500). This is a related six-state study; its abstract describes threshold-based methods and false-positive/false-negative analysis.
 7. F. Fiorini, R. G. Garroppo, and M. Pagano, “Threshold-based eavesdropper detection for partial intercept-resend attack in noisy BB84 quantum key distribution,” *Computer Networks*, 277, 112058 (2026), [doi:10.1016/j.comnet.2026.112058](https://doi.org/10.1016/j.comnet.2026.112058). This directly overlaps the proposal’s broad setting; its precise relationship to the planned pooled-versus-four-state comparison remains to be established by reading the paper.

@@ -43,4 +43,4 @@ For attack-free rows, `alarm_rate` is the realized familywise false-alarm rate. 
 - The CSV retains setting means rather than trial-level distributions, so uncertainty for costs and posterior confidence cannot be reconstructed.
 - Phase-sample, precision, recovery-threshold, and horizon sensitivity analyses remain necessary before making a security claim.
 
-The QFT results dashboard in `BB84.ipynb` validates completeness, derives outcome rates and confidence intervals, and produces proposal-facing summaries and figures from this file without rerunning the sweep.
+The [QFT repeated-secret notebook](../QFT_Repeated_Secret.ipynb) validates completeness, derives outcome rates and confidence intervals, and plots the saved sweep by default.

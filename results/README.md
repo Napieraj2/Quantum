@@ -16,4 +16,4 @@ The [QFT notebook](../QFT_Repeated_Secret.ipynb) loads the CSV, checks grid comp
 
 ## Scope
 
-This pilot used one joint-pattern alarm, fixed noise within a setting, and a cap of 100 retained checks (25 attempts). The proposal's 100-attempt recovery horizon and comparison of detector choices within QFT still need evaluation. The optional drift demo measures Bob's alarms over 100 attempts. The saved sweep contains setting means, so trial-level cost, confidence, and partial-recovery trajectories cannot be recovered from it.
+This pilot used one joint-pattern alarm, fixed noise within a setting, and a cap of 100 retained checks (25 attempts). The proposal's 100-attempt recovery horizon and comparison of detector choices within QFT still need evaluation. The separate drift demo measures Bob's alarms over 500 attempts using seeded, bounded, time-correlated channel rates. The saved sweep contains setting means, so trial-level cost, confidence, and partial-recovery trajectories cannot be recovered from it.

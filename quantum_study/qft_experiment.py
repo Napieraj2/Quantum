@@ -488,7 +488,16 @@ def qft_backend_cache(qubits, array_module):
 def qft_apply_pauli_channel_batch(
     density, q_z, q_x, cache, array_module
 ):
-    if min(q_z, q_x) < 0 or q_z + q_x > 1:
+    """Apply scalar rates or rates broadcastable across the batch dimensions."""
+    if np.isscalar(q_z) and np.isscalar(q_x):
+        valid_rates = q_z >= 0 and q_x >= 0 and q_z + q_x <= 1
+    else:
+        q_z = array_module.asarray(q_z, dtype=cache["real_dtype"])
+        q_x = array_module.asarray(q_x, dtype=cache["real_dtype"])
+        valid_rates = array_module.all((q_z >= 0) & (q_x >= 0) & (q_z + q_x <= 1))
+        q_z = q_z[..., None, None]
+        q_x = q_x[..., None, None]
+    if not valid_rates:
         raise ValueError(
             "q_z and q_x must be nonnegative and sum to at most one"
         )

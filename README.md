@@ -12,7 +12,7 @@ From the repository root, run `python -m pip install -r requirements.txt`. Open 
 | [QFT repeated secret](QFT_Repeated_Secret.ipynb) | Read the saved 1,210-setting pilot. Optional cells validate the model, demonstrate channel drift, and reproduce the sweep. |
 | [Gate baseline](Gate_Baseline.ipynb) | Optional single-qubit gate and readout diagnostics in local Qiskit Aer. |
 
-Set `RUN_RECALIBRATION_DEMO = True` for the 100-attempt Bob-side comparison of fixed and frequent recalibration. Keep `RUN_FULL_QFT_SWEEP = False` when reviewing the saved results.
+Set `RUN_RECALIBRATION_DEMO = True` for the 500-attempt Bob-side comparison of fixed and frequent recalibration. Drifting paths use a seeded, bounded, mean-reverting multiplier shared by `q_Z` and `q_X`, so nearby channel rates remain similar. Keep `RUN_FULL_QFT_SWEEP = False` when reviewing the saved results.
 
 The QFT posterior uses NumPy on CPU and optionally CuPy on CUDA. Install `requirements-gpu.txt` for CUDA 13.x or substitute `cupy-cuda12x` for CUDA 12.x. Choose `BACKEND = "auto"` for selection with CPU fallback, or `"numpy"` or `"cupy"` explicitly.
 

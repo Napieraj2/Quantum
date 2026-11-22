@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 
 from .qft_experiment import (
-    MAX_ATTEMPTS,
     QFT_DEMO_Q_X,
     QFT_DEMO_Q_Z,
     SECRET_BITS,
@@ -18,6 +17,8 @@ from .qft_experiment import (
 )
 
 
+RECALIBRATION_ATTEMPT_CAP = 500
+RECALIBRATION_LOOK_EVERY = 5
 RECALIBRATION_SEED = 20261122
 
 
@@ -52,7 +53,7 @@ def compare_alarm_policies(
     calibration,
     cases,
     *,
-    look_every=5,
+    look_every=RECALIBRATION_LOOK_EVERY,
     update_weight=0.5,
     target=0.05,
     seed=RECALIBRATION_SEED,
@@ -166,7 +167,7 @@ def _decoded_distribution(phase_diagonal, messages, leg_channels, cache, inverse
 
 
 def _sample_check_scores(rng, trials, noise_by_attempt, reference_noise, eve_channels=()):
-    """Generate four 2-qubit checks per attempt, scored at the reference noise."""
+    """Score four checks per attempt with shared or per-trial physical noise."""
     cache = qft_backend_cache(2, np)
     inverse_qft = qft_matrix(2).conj().T
     shape = (trials, SECRET_BITS)
@@ -184,8 +185,13 @@ def _sample_check_scores(rng, trials, noise_by_attempt, reference_noise, eve_cha
         )
 
         actual_message = check_only + (secret << check_position)
+        q_z, q_x = noise.T
+        if noise.ndim == 2:
+            # Each trial's rates apply to all four blocks in that attempt.
+            q_z = q_z[:, None]
+            q_x = q_x[:, None]
         physical = _decoded_distribution(
-            scrambler, actual_message, (tuple(noise), *eve_channels), cache, inverse_qft,
+            scrambler, actual_message, ((q_z, q_x), *eve_channels), cache, inverse_qft,
         )
         chance_of_match = (physical * matching).sum(axis=-1)
         matched = rng.random(shape) < chance_of_match
@@ -201,11 +207,38 @@ def _sample_check_scores(rng, trials, noise_by_attempt, reference_noise, eve_cha
     return scores
 
 
-def run_qft_recalibration_demo(trials=512, seed=RECALIBRATION_SEED, *, calibration_trials=2048):
-    """Compare two policies over 100 attempts with stationary or drifting noise."""
+def _sample_noise_multipliers(rng, attempts, trials):
+    """Draw bounded mean-reverting noise from a separate stream."""
+    persistence = 0.98
+    innovation_sd = 0.30 * np.sqrt(1 - persistence**2)
+    levels = np.ones((attempts, trials))
+    for attempt in range(1, attempts):
+        previous_offset = levels[attempt - 1] - 1
+        jitter = rng.normal(0, innovation_sd, size=trials)
+        levels[attempt] = np.clip(1 + persistence * previous_offset + jitter, 0.5, 2.0)
+    return levels
+
+
+def run_qft_recalibration_demo(
+    trials=512, seed=RECALIBRATION_SEED, *, calibration_trials=2048,
+    attempt_cap=RECALIBRATION_ATTEMPT_CAP,
+):
+    """Compare two alarm policies through the cap, with looks every five attempts."""
+    if (
+        type(attempt_cap) is not int
+        or attempt_cap < RECALIBRATION_LOOK_EVERY
+        or attempt_cap % RECALIBRATION_LOOK_EVERY
+    ):
+        raise ValueError(
+            f"attempt_cap must be a positive multiple of {RECALIBRATION_LOOK_EVERY}"
+        )
     reference_noise = (QFT_DEMO_Q_Z, QFT_DEMO_Q_X)
-    stable = np.tile(reference_noise, (MAX_ATTEMPTS, 1))
-    drift = np.linspace(reference_noise, (0.004, 0.076), MAX_ATTEMPTS)
+    stable = np.tile(reference_noise, (attempt_cap, 1))
+    noise_seed, trials_seed = np.random.SeedSequence(seed).spawn(2)
+    levels = _sample_noise_multipliers(
+        np.random.default_rng(noise_seed), attempt_cap, trials,
+    )
+    drift = levels[..., None] * np.asarray(reference_noise)
 
     # For independent basis redraw, an unobserved measurement in basis B
     # maps rho to (rho + B rho B)/2. Average each Eve separately on each leg.
@@ -221,7 +254,7 @@ def run_qft_recalibration_demo(trials=512, seed=RECALIBRATION_SEED, *, calibrati
         "Interception": (stable, eve_channels),
         "Drift and interception": (drift, eve_channels),
     }
-    streams = np.random.SeedSequence(seed).spawn(len(settings) + 2)
+    streams = trials_seed.spawn(len(settings) + 2)
     calibration = _sample_check_scores(
         np.random.default_rng(streams[0]), calibration_trials, stable, reference_noise,
     )

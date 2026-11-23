@@ -1,7 +1,9 @@
-"""Noiseless, inference-parity, and recovery checks for the QFT model.
+"""Noiseless, inference-parity, and recovery checks for the archived pilot.
 
 The noiseless check exercises the two-pass round trip in Papadopoulos and
-Linvill, §4.1, Eqs. (1)–(3). The parity and recovery checks test this project.
+Linvill, §4.1, Eqs. (1)–(3). The parity checks establish agreement between
+the scalar and batched implementations of the historical sampled-phase
+likelihood; they do not establish exact phase marginalization.
 https://arxiv.org/abs/2404.12507v2
 """
 

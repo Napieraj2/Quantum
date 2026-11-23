@@ -1,5 +1,7 @@
 # BB84 detector calculation
 
+This control implements the fixed-count, known-rate special case in the project proposal, §2. The reference rates are from [Erven et al., §4](https://arxiv.org/abs/0901.0960v2), and the partial intercept-resend model follows the standard BB84 calculation used by [Lee, Lee, and Lee, §III](https://dl.ifip.org/db/conf/ondm/ondm2023/1570879964.pdf).
+
 ## Noise and sample model
 
 The single-look example fixes 25 retained check bits for each of four prepared states. The model uses independent symmetric baseline flips with rates 0.002 for Z0/Z1 and 0.038 for X+/X-.
@@ -59,6 +61,8 @@ U4 = wZ * (E_Z0 + E_Z1 - 50*qZ)
    = U2
 ```
 
+The code evaluates this conditioned statistic once and publishes the same value under the `U2` and `U4` proposal labels. The tests independently substitute the four state weights into the displayed `U4` expression and verify equality for every enumerated count vector.
+
 For each statistic, the code selects a nonrandomized cutoff whose upper-tail probability under no attack does not exceed 5%. An alarm occurs only when the statistic is strictly greater than its cutoff. All powers and false-alarm probabilities below use that rule.
 
 ## Exact results for uniform Eve (`r = 0.5`)
@@ -81,13 +85,13 @@ For each pair `(f, r)`, the code also generates 50,000 independent Monte Carlo c
 
 ## Ideal QFT calculation
 
-For `b` qubits, set `D = 2^b`. The ideal encoded amplitudes are proportional to `exp(2*pi*i*m*x/D)`. After removing an independent private phase, applying the inverse QFT returns the computational-basis value `m`. The matrix check covers every possible `m` for `b=2` and `b=4`. The maximum calculated amplitude error is approximately `4.12e-15`, consistent with floating-point rounding.
+This identity is derived from [Papadopoulos and Linvill, §4.1, Eqs. (1)--(3) and Fig. 2](https://arxiv.org/abs/2404.12507v2). For `b` qubits, set `D = 2^b`. The ideal encoded amplitudes are proportional to `exp(2*pi*i*m*x/D)`. After removing an independent private phase, applying the inverse QFT returns the computational-basis value `m`. The matrix check covers every possible `m` for `b=2` and `b=4`. The maximum calculated amplitude error is approximately `4.10e-15`, consistent with floating-point rounding.
 
 This is a no-noise algebra check. It does not simulate Eve's measurements or evaluate the complete two-pass protocol.
 
 ## Recovery decision rule
 
-For a four-bit repeated secret, the posterior is defined over 16 possible values. Given an array of log likelihoods for the 16 candidates, the recovery module computes a normalized posterior and finds the first attempt where the largest posterior is at least 0.99.
+For a four-bit repeated secret, the posterior is defined over 16 possible values. Given cumulative log likelihoods for the 16 candidates through each attempt, the recovery module applies the proposal's uniform prior, computes a normalized posterior, and finds the first attempt where the largest posterior is at least 0.99. History rows are cumulative evidence, not per-attempt likelihood increments.
 
 A correct declaration counts as recovery only when it occurs no later than attempt 100 and strictly before Bob's first alarm. A declaration at the same attempt as the alarm does not count. The supplied log likelihoods must represent Eve's available measurements and public transcript, with Bob's unreleased private randomness marginalized. Likelihood generation is not part of this module.
 

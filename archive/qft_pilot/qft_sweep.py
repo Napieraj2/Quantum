@@ -1,7 +1,11 @@
-"""QFT factorial settings from proposal §2 and reproducible pilot runs.
+"""Archived factorial settings and reproducible pilot runs.
 
-Erven et al., §4, supply the reference basis error rates. The synthetic
-profiles and Eve settings come from the proposal.
+The grid comes from Napieraj and Chuang, "Detecting Patient Attacks on a
+Repeated Secret," §2. Erven et al., §4, supply the reference basis error
+rates; the remaining synthetic noise profiles and Eve settings are
+proposal-specific. Within one attack setting, every Eve uses the same
+interception, basis-bias, and redraw rates, while its random draws are
+independent.
 https://arxiv.org/abs/0901.0960v2
 """
 
@@ -52,9 +56,9 @@ del _mean, _low, _high
 
 
 QFT_PROGRESS_EVERY = 10
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-QFT_CHECKPOINT_PATH = _PROJECT_ROOT / "results/qft_factorial_checkpoint.json"
-QFT_RESULTS_PATH = _PROJECT_ROOT / "results/qft_factorial_results.csv"
+_ARCHIVE_ROOT = Path(__file__).resolve().parents[1]
+QFT_CHECKPOINT_PATH = _ARCHIVE_ROOT / "results/qft_factorial_checkpoint.json"
+QFT_RESULTS_PATH = _ARCHIVE_ROOT / "results/qft_factorial_results.csv"
 QFT_RESUME_SWEEP = True
 QFT_FULL_RUNS_PER_SETTING = 100
 QFT_CHECKPOINT_SCHEMA = 1
@@ -304,8 +308,6 @@ def run_qft_factorial_sweep(
                     batch_size=batch_size,
                     backend=backend,
                 )
-                if not isinstance(trials, pd.DataFrame):
-                    trials = pd.DataFrame(trials)
                 row = summarize_qft_trials(trials, setting)
                 row.update({
                     "setting_key": setting_key,

@@ -1,15 +1,7 @@
 import unittest
-from itertools import product
 
 import numpy as np
 
-from archive.qft_pilot.qft_inference import qft_record_likelihood_scalar
-from archive.qft_pilot.qft_protocol import (
-    qft_bits,
-    qft_check_distribution,
-    qft_integer,
-    qft_message,
-)
 from quantum_study.qft_alarm import _look_schedules, _replay_alarms
 from quantum_study.qft_exchange import (
     _null_decoding_probabilities,
@@ -23,6 +15,30 @@ from quantum_study.qft_study import (
     _study_rows,
     run_qft_study,
 )
+
+
+# Independent full-density known answers for Papadopoulos–Linvill §4.1,
+# Eqs. (1)–(3), with the proposal's local X(q_z)/Z(q_x) channel on both legs.
+# The Eve fixture phase-twirls the input exactly to I/2**q before applying the
+# ordered record projectors; the check fixture applies Scr, Enc, Scr†, and QFT†.
+_RECORD_POSTERIORS = {
+    2: np.tile([0.019, 0.481], 2),
+    4: np.tile([0.00475, 0.12025], 8),
+}
+# Check values are 1 at position 0 (2q), and 1/0 at positions 0/2 (4q).
+_CHECK_CANDIDATES = {
+    2: np.array([2, 3]),
+    4: np.array([8, 9, 12, 13]),
+}
+_CHECK_DISTRIBUTIONS = {
+    2: np.array([0.10591964666739746, 0.8940803533326026]),
+    4: np.array([
+        0.09868142955120347,
+        0.0362907458738645,
+        0.7949530707668979,
+        0.07007475380803409,
+    ]),
+}
 
 
 class QFTStudyTests(unittest.TestCase):
@@ -60,57 +76,51 @@ class QFTStudyTests(unittest.TestCase):
             forward = np.full(qubits, -1)
             returned = np.full(qubits, -1)
             returned[0], returned[-1] = 0, 3
-            likelihoods = _payload_likelihoods(_rotations(qubits), forward, returned, 0.038)
+            likelihoods = _payload_likelihoods(
+                _rotations(qubits), forward, returned, 0.038
+            )
             np.testing.assert_array_equal(likelihoods, 1)
 
-    def test_informative_record_pairs_match_exact_density_average(self):
-        records = [
-            dict(leg="forward", signal=0, basis="Z", outcome=0),
-            dict(leg="forward", signal=0, basis="X", outcome=0),
-            dict(leg="forward", signal=1, basis="X", outcome=1),
-            dict(leg="return", signal=0, basis="X", outcome=1),
-            dict(leg="return", signal=0, basis="Z", outcome=0),
-            dict(leg="return", signal=1, basis="Z", outcome=0),
-        ]
+    def test_informative_record_pairs_match_full_density_fixture(self):
+        # Ordered full-density transcript: forward s0 Z0→X0, s1 X1;
+        # return s0 X1→Z0, s1 Z0. The arrays retain the sufficient last
+        # forward (X0, X1) and first return (X1, Z0) records.
         for qubits in (2, 4):
-            phase_grid = np.array(list(product((0, np.pi), repeat=qubits)))
-            reference = np.array([
-                qft_record_likelihood_scalar(qubits, message, records, 0.002, 0.038, phase_grid)
-                for message in range(2**qubits)
-            ])
             forward = np.full(qubits, -1)
             returned = np.full(qubits, -1)
             forward[:2], returned[:2] = (2, 3), (3, 0)
-            likelihoods = _payload_likelihoods(_rotations(qubits), forward, returned, 0.038)
-            np.testing.assert_allclose(likelihoods / likelihoods.sum(), reference / reference.sum())
+            likelihoods = _payload_likelihoods(
+                _rotations(qubits), forward, returned, 0.038
+            )
+            np.testing.assert_allclose(
+                likelihoods / likelihoods.sum(),
+                _RECORD_POSTERIORS[qubits],
+                rtol=0,
+                atol=1e-14,
+            )
 
-    def test_joint_check_probability_matches_archived_scalar_model(self):
+    def test_joint_check_probability_matches_full_density_fixture(self):
         q_z, q_x = 0.002, 0.038
         for qubits in (2, 4):
             phases = np.linspace(0.17, 2.41, qubits)
             checks = tuple(range(0, qubits, 2))
-            values = tuple((index + 1) % 2 for index in range(len(checks)))
-            reference = qft_check_distribution(
-                qubits, checks, values, phases, q_z, q_x
-            )
-            width = qubits // 2
-            candidates = np.array([
-                qft_message(checks, values, qft_bits(payload, width), qubits)
-                for payload in range(2**width)
-            ])
             probabilities = _null_decoding_probabilities(
-                np.exp(1j * phases), candidates, _rotations(qubits), q_z, q_x
+                np.exp(1j * phases), _CHECK_CANDIDATES[qubits],
+                _rotations(qubits), q_z, q_x,
             )
-            for outcome in (0, 2 ** (qubits - 1), 2**qubits - 1):
-                outcome_bits = qft_bits(outcome, qubits)
-                pattern = qft_integer([
-                    outcome_bits[position] for position in checks
-                ])
-                candidate = sum(
-                    probability for word, probability in enumerate(probabilities)
-                    if all(qft_bits(word, qubits)[position] == outcome_bits[position] for position in checks)
+            words = np.arange(2**qubits)
+            patterns = np.zeros_like(words)
+            for position in checks:
+                patterns = (
+                    2 * patterns
+                    + ((words >> (qubits - 1 - position)) & 1)
                 )
-                self.assertAlmostEqual(candidate, reference[pattern], places=14)
+            candidate = np.bincount(
+                patterns, weights=probabilities, minlength=2 ** len(checks)
+            )
+            np.testing.assert_allclose(
+                candidate, _CHECK_DISTRIBUTIONS[qubits], rtol=0, atol=1e-14
+            )
 
     def test_same_attempt_alarm_wins_and_freezes_prior_posterior(self):
         attempts = 4
@@ -155,6 +165,17 @@ class QFTStudyTests(unittest.TestCase):
             block_qubits=2,
         )
         self.assertTrue(all(row["bit_1"] == 0.9 for row in curves))
+
+    def test_session_cost_continues_after_eves_declaration(self):
+        paths = {"secret": np.zeros(2, dtype=int), "final_key_agrees": np.ones(2, dtype=bool)}
+        for block_qubits in (2, 4):
+            summary, *_ = _study_rows(
+                paths, "Pooled check errors", np.array([5, 3]), np.full(2, 5),
+                np.array([2, 2]), np.zeros(2, dtype=int), attempts=4, block_qubits=block_qubits,
+            )
+            self.assertEqual(summary["correct_recovery_rate"], 1.0)
+            self.assertEqual(summary["mean_checks"], 14)
+            self.assertEqual(summary["mean_transmitted_qubits"], 56)
 
     def test_accepted_key_exposure_uses_acceptance_denominator(self):
         attempts = 4

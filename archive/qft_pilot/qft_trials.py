@@ -1,4 +1,14 @@
-"""Bob's alarm calibration and repeated-secret trial execution."""
+"""Archived alarm calibration and repeated-secret pilot trials.
+
+The 20/50/100-check looks, 5% family-wise alarm target, and 99% recovery
+declaration come from Napieraj and Chuang, "Detecting Patient Attacks on a
+Repeated Secret," §2. This archive evaluates the joint check-pattern detector
+with 100 null calibration trajectories, not every detector and calibration size
+in the proposal. Each attempt retains four checks, so the 100-check terminal
+look ends a trial after 25 attempts; ``MAX_ATTEMPTS`` is only a safety cap. The
+QFT exchange is sourced in ``qft_protocol``; the sampled-phase posterior
+limitation is documented in ``qft_inference``.
+"""
 
 import numpy as np
 import pandas as pd

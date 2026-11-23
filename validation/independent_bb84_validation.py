@@ -51,7 +51,11 @@ def simulate_rounds(n, f, baseline_errors, seed):
     q0 = np.asarray(baseline_errors, dtype=float)
     if n <= 0 or not 0 <= f <= 1:
         raise ValueError("n must be positive and f must be between 0 and 1")
-    if q0.shape != (4,) or np.any((q0 < 0) | (q0 >= 0.5)):
+    if (
+        q0.shape != (4,)
+        or not np.all(np.isfinite(q0))
+        or np.any((q0 < 0) | (q0 >= 0.5))
+    ):
         raise ValueError("Provide four baseline error rates between 0 and 0.5")
 
     rng = np.random.default_rng(seed)
@@ -86,14 +90,15 @@ def simulate_rounds(n, f, baseline_errors, seed):
     errors = np.bincount(kept_states[wrong_bit], minlength=4)
 
     total = int(counts.sum())
+    error_total = int(errors.sum())
     if total == 0:
         raise ValueError("No rounds left after basis sifting")
     return {
         "transmitted": n,
         "intercept_fraction": f,
         "sifted": total,
-        "errors": int(errors.sum()),
-        "qber": int(errors.sum()) / total,
+        "errors": error_total,
+        "qber": error_total / total,
         "state_counts": counts,
         "state_errors": errors,
     }

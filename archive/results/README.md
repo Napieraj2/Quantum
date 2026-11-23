@@ -12,10 +12,10 @@ The [saved CSV](qft_factorial_results.csv) has one row per setting. It contains 
 
 In an attack setting, `alarm_rate` measures alarms before recovery or the budget. The two recovery columns distinguish correct and incorrect declarations. The remaining fraction reached the budget with neither outcome. In a noise-only setting, `alarm_rate` is the probability of any false alarm across the looks, and `eve_p_z` and `redraw_probability` are placeholders.
 
-The [archived pilot notebook](../archive/qft_pilot/QFT_Factorial_Pilot.ipynb) loads and plots this CSV. It supports checkpoint resume for reproduction. The [active QFT notebook](../QFT_Repeated_Secret.ipynb) runs the focused paired experiment with exact phase averaging.
+The [archived pilot notebook](../qft_pilot/QFT_Factorial_Pilot.ipynb) loads and plots this CSV. It supports checkpoint resume for reproduction. The [active QFT notebook](../../QFT_Repeated_Secret.ipynb) runs the focused paired experiment with exact phase averaging.
 
 ## Scope
 
 This pilot used one joint-pattern alarm, fixed noise within a setting, and a cap of 100 retained checks (25 attempts). The separate drift demo measures Bob's alarms over 500 attempts using seeded, bounded, time-correlated channel rates. The saved sweep contains setting means.
 
-The pilot's 16-sample phase approximation can make an Eve observation from the return leg alone appear informative about the secret. The active comparison uses the exact phase average and a separate 100-attempt schedule. Its figures describe the selected configuration. [Archived posterior calculation](../archive/qft_pilot/qft_inference.py) · [Current exchange](../quantum_study/qft_exchange.py)
+The pilot's 16-sample phase approximation can make an Eve observation from the return leg alone appear informative about the secret. The active comparison uses the exact phase average and a separate 100-attempt schedule. Its figures describe the selected configuration. [Archived posterior calculation](../qft_pilot/qft_inference.py) · [Current exchange](../../quantum_study/qft_exchange.py)

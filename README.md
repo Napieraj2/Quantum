@@ -25,8 +25,6 @@ Open a notebook, edit the first code cell if needed, and choose **Run All**. The
 
 BB84 and QFT start with the Erven reference noise rates. The BB84 notebook offers a broader sweep in its first cell. The QFT notebook starts with two Eves using different basis biases and compares pooled check errors with the block check-pattern score. It uses the published two-pass circuit and the proposal's repeated four-bit secret. [Methods and deliverable map](validation/MODEL_NOTES.md#proposal-deliverables)
 
-The original 1,210-setting GPU pilot, its checkpoint workflow, and the 500-attempt Bob-only drift demo are available in the archive. [QFT pilot and run instructions](archive/qft_pilot/README.md)
-
 ## QFT alarm-response results
 
 The X-only sweep tested 300 attack settings with 1,024 trials each and a 100-attempt cap. Bob either rejected the key at his first threshold crossing or treated interim crossings as noise, cleared his evidence, and kept the same key. In both cases a final crossing or key mismatch rejected the key. The fixed schedule makes decisions at attempts 25, 50, and 100. The random schedule draws 2–4 decision points per trial, including attempt 100. [Full sweep data](results/qft_alarm_policy_sweep.csv)
@@ -58,7 +56,7 @@ Each point combines 20,480 attacked trials across both block sizes and all ten n
 
 ## Proposal setting results
 
-The sweep uses the ten distinct noise pairs in §2 of the proposal. These include zero noise and balanced or 90%-skewed rates at 1%, 2%, and 4% mean noise. The Erven pair `(0.002, 0.038)` is the 2% mean case with higher errors in the X basis. Percentages in the tables average the included settings. The bundle contains the individual results, counts, and QFT runner. [Proposal setting data and runner](results/proposal_setting_results.zip)
+The sweep uses the ten distinct noise pairs in §2 of the proposal. These include zero noise and balanced or 90%-skewed rates at 1%, 2%, and 4% mean noise. The Erven pair `(0.002, 0.038)` is the 2% mean case with higher errors in the X basis. Percentages in the tables average the included settings. The bundle contains the individual results and a self-contained QFT runner. From the extracted folder, run `python qft_runner/run.py` in the study’s Python environment. [Proposal setting data and runner](results/proposal_setting_results.zip)
 
 ### QFT repeated secret
 
@@ -109,3 +107,7 @@ python -m unittest discover -s validation -p "test_*.py" -v
 ```
 
 See the [validation guide](validation/README.md) for the independent BB84 control and model tests. The notebook runs display the study figures.
+
+## Archive
+
+The original 1,210-setting GPU pilot, its saved results and checkpoint workflow, and the 500-attempt Bob-only drift demo are in the archive. [QFT pilot and run instructions](archive/qft_pilot/README.md)

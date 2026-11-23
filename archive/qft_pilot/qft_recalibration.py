@@ -46,9 +46,10 @@ def _cumulative_residuals(window_scores, initial_center, update_weight):
     cumulative = np.zeros(len(window_scores), dtype=float)
     residuals = np.empty_like(window_scores, dtype=float)
     for look, observed in enumerate(window_scores.T):
-        cumulative += observed - center
+        difference = observed - center
+        cumulative += difference
         residuals[:, look] = cumulative
-        center += update_weight * (observed - center)
+        center += update_weight * difference
     return residuals
 
 

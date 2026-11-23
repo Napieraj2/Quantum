@@ -6,10 +6,11 @@ project uses a newer exchange model.
 
 Open `QFT_Factorial_Pilot.ipynb` from either the repository root or this
 directory. Its first code cell finds the repository root, loads the validated
-CSV from `results/`, and exposes the optional run flags. Set
+CSV from `archive/results/`, and exposes the optional run flags. Set
 `RUN_RECALIBRATION_DEMO = True` for the 500-attempt Bob-alarm comparison or
 `RUN_FULL_QFT_SWEEP = True` to reproduce the factorial pilot. Checkpoints and
-reproduction CSVs remain under the repository-level `results/` directory.
+reproduction CSVs remain under `archive/results/`. To resume an older local
+checkpoint, move it there or set `CHECKPOINT_PATH` to its existing location.
 
 Run the archived tests from the repository root:
 
@@ -47,4 +48,4 @@ and precision as the checkpoint.
 | [qft_experiment.py](qft_experiment.py) | Setup only. Compatibility imports. |
 | [__init__.py](__init__.py) | Setup only. Python package marker. |
 
-See the [pilot results and limitations](../../results/README.md).
+See the [pilot results and limitations](../results/README.md).

@@ -5,7 +5,9 @@ Phase scrambling, encoding, and decoding follow Papadopoulos and Linvill,
 https://arxiv.org/abs/2404.12507v2
 
 Proposal §2 specifies the per-leg Pauli channel. Its reference rates come
-from Erven et al., §4. The focused run redraws each Eve's basis independently.
+from Erven et al., §4. The focused run gives every Eve the same interception
+rate and draws a fresh independent basis at every hit, corresponding to the
+proposal's λ=1 case.
 https://arxiv.org/abs/0901.0960v2
 """
 
@@ -89,13 +91,38 @@ def _payload_likelihoods(encodings, last_forward, first_return, q_x):
     return np.where(informative[..., None, :], paired, 1).prod(axis=-1)
 
 
+def _validate_path_settings(trials, attempts, qubits, intercept_probability):
+    if type(trials) is not int or trials < 1:
+        raise ValueError("trials must be a positive integer")
+    if type(attempts) is not int or attempts < 1:
+        raise ValueError("attempts must be a positive integer")
+    if type(qubits) is not int or qubits not in (2, 4):
+        raise ValueError("qubits must be 2 or 4")
+    if not 0 <= intercept_probability <= 1:
+        raise ValueError("intercept_probability must be between zero and one")
+
+
+def _eve_biases(probabilities):
+    biases = tuple(probabilities)
+    if any(not 0 <= probability <= 1 for probability in biases):
+        raise ValueError("eve_z_probabilities must lie between zero and one")
+    return biases
+
+
 def simulate_paths(
     rng, *, trials, qubits, q_z, q_x, attempts,
     intercept_probability=0.0, eve_z_probabilities=(), include_posterior=True,
 ):
-    """Sample exchanges through the cap, with interception ending at Eve's declaration."""
+    """Sample exchanges through the cap, with interception ending at Eve's declaration.
+
+    Stopping interception and confirming the final decoded key are policies
+    introduced for this experiment.
+    """
+    _validate_path_settings(trials, attempts, qubits, intercept_probability)
     if not (q_z >= 0 and q_x >= 0 and q_z + q_x <= 1):
         raise ValueError("q_z and q_x must be nonnegative and sum to at most one")
+    eve_z_probabilities = _eve_biases(eve_z_probabilities)
+
     width = qubits // 2
     blocks = 4 // width
     rotations = _rotations(qubits)
@@ -175,11 +202,9 @@ def simulate_paths(
         if include_posterior:
             posterior[:, attempt] = np.exp(log_posterior)
 
-    final_key_agrees = np.zeros(trials, dtype=bool)
-    if attempts:
-        # Drop the check bits and concatenate the final exchange's payload blocks.
-        final_key = np.take_along_axis(decoded_blocks, payload, axis=-1).reshape(trials, 4)
-        final_key_agrees = (final_key == secret_bits[secret]).all(axis=1)
+    # Drop the check bits and concatenate the final exchange's payload blocks.
+    final_key = np.take_along_axis(decoded_blocks, payload, axis=-1).reshape(trials, 4)
+    final_key_agrees = (final_key == secret_bits[secret]).all(axis=1)
 
     paths = {
         "secret": secret,

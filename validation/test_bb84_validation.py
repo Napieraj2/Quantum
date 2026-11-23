@@ -53,6 +53,8 @@ class BB84ValidationTests(unittest.TestCase):
             simulate_rounds(10, 1.5, (0, 0, 0, 0), seed=1)
         with self.assertRaises(ValueError):
             simulate_rounds(10, 0.2, (0.01, 0.03), seed=1)
+        with self.assertRaises(ValueError):
+            simulate_rounds(10, 0.2, (np.nan, 0, 0, 0), seed=1)
 
 
 if __name__ == "__main__":

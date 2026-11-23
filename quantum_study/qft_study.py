@@ -1,11 +1,17 @@
-"""Paired 100-attempt QFT alarm and repeated-secret recovery study."""
+"""Paired QFT alarm and repeated-secret recovery study."""
 
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 
-from .qft_exchange import CHECKS_PER_ATTEMPT, RECOVERY_CONFIDENCE, simulate_paths
+from .qft_exchange import (
+    CHECKS_PER_ATTEMPT,
+    RECOVERY_CONFIDENCE,
+    _eve_biases,
+    _validate_path_settings,
+    simulate_paths,
+)
 
 
 DETECTORS = ("Pooled check errors", "Joint-check surprisal")
@@ -110,9 +116,8 @@ def _study_rows(
     correct = declaration_first & (declaration_guess == secret)
     incorrect = declaration_first & ~correct
     inconclusive = ~(alarm_first | declaration_first)
-    stop_attempt = np.minimum(alarm_attempt, declaration_attempt)
-    stop_attempt = np.minimum(stop_attempt, attempts)
-    retained_checks = CHECKS_PER_ATTEMPT * stop_attempt
+    # Bob's session runs until his own alarm or the attempt cap.
+    session_attempt = np.minimum(alarm_attempt, attempts)
     blocks_per_attempt = 4 // (block_qubits // 2)
     transmitted_per_attempt = 2 * block_qubits * blocks_per_attempt
 
@@ -131,9 +136,9 @@ def _study_rows(
         "correct_recovery_rate": np.mean(correct),
         "incorrect_recovery_rate": np.mean(incorrect),
         "inconclusive_rate": np.mean(inconclusive),
-        "mean_checks": np.mean(retained_checks),
+        "mean_checks": np.mean(CHECKS_PER_ATTEMPT * session_attempt),
         "mean_transmitted_qubits": np.mean(
-            stop_attempt * transmitted_per_attempt
+            session_attempt * transmitted_per_attempt
         ),
         "accepted_sessions": accepted_sessions,
         "exposed_accepted_keys": exposed_accepted_keys,
@@ -188,14 +193,9 @@ def _percentage_looks(attempts):
 
 
 def _validate_study(attempts, trials, block_qubits, intercept_probability):
-    if type(attempts) is not int or attempts < 4:
+    _validate_path_settings(trials, attempts, block_qubits, intercept_probability)
+    if attempts < 4:
         raise ValueError("attempts must be an integer of at least four")
-    if type(trials) is not int or trials < 1:
-        raise ValueError("trials must be a positive integer")
-    if type(block_qubits) is not int or block_qubits not in (2, 4):
-        raise ValueError("block_qubits must be 2 or 4")
-    if not 0 <= intercept_probability <= 1:
-        raise ValueError("intercept_probability must be between zero and one")
 
 
 def run_qft_study(
@@ -212,15 +212,14 @@ def run_qft_study(
 
     ``trials`` independent paths are used for each of three domains: fitting
     stationary-null alarm rules, measuring held-out false alarms, and the
-    two-Eve attack. Detector comparisons share every physical attack path.
+    configured multi-Eve attack. Detector comparisons share every physical
+    attack path. Looks occur at 25%, 50%, and 100% of the attempt cap; this is
+    separate from the proposal's 20/50/100 retained-check factorial.
     """
     _validate_study(attempts, trials, block_qubits, intercept_probability)
-    eve_z_probabilities = tuple(eve_z_probabilities)
-    if not eve_z_probabilities or any(
-        not 0 <= probability <= 1
-        for probability in eve_z_probabilities
-    ):
-        raise ValueError("eve_z_probabilities must lie between zero and one")
+    eve_z_probabilities = _eve_biases(eve_z_probabilities)
+    if not eve_z_probabilities:
+        raise ValueError("eve_z_probabilities must contain at least one basis bias")
 
     looks = _percentage_looks(attempts)
     fit_root, null_root, attack_root, null_ties, attack_ties = (

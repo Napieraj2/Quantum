@@ -1,4 +1,9 @@
-"""Replay QFT check records under alternate alarm schedules and responses."""
+"""Compare out-of-proposal alarm schedules and responses for X-only Eves.
+
+The random policy varies both look count and timing. The false-alarm target
+applies to the first crossing. Final rejection under reset is an observed
+consequence of Bob's response.
+"""
 
 import numpy as np
 import pandas as pd
@@ -70,7 +75,11 @@ def run_qft_alarm_comparison(
     coalition_sizes=(1, 2, 4, 8, 16), random_look_range=(2, 4),
     q_z=0.002, q_x=0.038, seed=DEFAULT_SEED,
 ):
-    """Compare first crossings and final key acceptance for X-only coalitions."""
+    """Compare first crossings and final key acceptance for X-only coalitions.
+
+    ``exposed_after_reset`` counts exposed acceptances in sessions with an
+    interim reset. Eve may have recovered the key before or after that reset.
+    """
     _validate_study(attempts, trials, block_qubits, intercept_probability)
     coalition_sizes = tuple(coalition_sizes)
     if not coalition_sizes or any(type(size) is not int or size < 1 for size in coalition_sizes):
@@ -127,6 +136,7 @@ def run_qft_alarm_comparison(
                 noise_crossing, noise_final = noise_rates[key]
                 settings = {
                     "eve_count": eve_count,
+                    # Per qubit-leg probability that at least one Eve intercepts.
                     "effective_intercept_probability": 1 - (1 - intercept_probability) ** eve_count,
                     "schedule": schedule,
                     "detector": detector,

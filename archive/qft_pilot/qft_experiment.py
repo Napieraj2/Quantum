@@ -1,4 +1,4 @@
-"""Compatibility imports for the QFT study. New code can import the owning modules."""
+"""Compatibility exports for the archived QFT factorial pilot."""
 
 from . import qft_inference as _inference
 from .qft_protocol import (

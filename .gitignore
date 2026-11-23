@@ -2,6 +2,6 @@
 __pycache__/
 apikey.json
 homework/
-results/qft_factorial_checkpoint.json
-results/qft_factorial_checkpoint.json.tmp
-results/qft_factorial_results.csv.tmp
+qft_factorial_checkpoint.json
+qft_factorial_checkpoint.json.tmp
+qft_factorial_results.csv.tmp

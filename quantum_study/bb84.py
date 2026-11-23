@@ -200,6 +200,7 @@ def run_terminal(config):
         for seed in np.random.SeedSequence(config.terminal_seed).spawn(4)
     ]
     rows = []
+    scenarios = _scenarios(config)
     for noise, q_z, q_x in config.noise_profiles:
         true_rates = np.repeat([q_z, q_x], 2)
         fits = _fits(fit_rng, true_rates, config)
@@ -212,7 +213,7 @@ def run_terminal(config):
                 _cutoffs(detector_scores(*cutoff_data, fit), config.target_false_alarm)
                 for _, _, fit in fits
             ]
-            for fraction, eve_p_z, is_attack in _scenarios(config):
+            for fraction, eve_p_z, is_attack in scenarios:
                 rng = attack_rng if is_attack else null_rng
                 data = sample_checks(
                     rng, fraction, eve_p_z,
@@ -269,10 +270,6 @@ def summarize_calibration(results):
     )
 
 
-def _look_counts(budget, fractions):
-    return np.ceil(budget * np.asarray(fractions)).astype(int)
-
-
 def _sample_looks(rng, looks, fraction, eve_p_z, *, trials, baseline):
     counts = np.zeros((trials, 4), dtype=int)
     errors = np.zeros_like(counts)
@@ -323,11 +320,13 @@ def run_cumulative(config):
         for seed in np.random.SeedSequence(config.cumulative_seed).spawn(4)
     ]
     rows = []
+    scenarios = _scenarios(config)
     for noise, q_z, q_x in config.noise_profiles:
         true_rates = np.repeat([q_z, q_x], 2)
         fits = _fits(fit_rng, true_rates, config)
         for budget in config.check_budgets:
-            looks = _look_counts(budget, config.look_fractions)
+            looks = np.ceil(budget * np.asarray(config.look_fractions)).astype(int)
+            look_counts = tuple(map(int, looks))
             cutoff_data = _sample_looks(
                 cutoff_rng, looks, 0, 0.5,
                 trials=config.cumulative_cutoff_trials, baseline=true_rates,
@@ -341,7 +340,7 @@ def run_cumulative(config):
                 cutoffs, ties = _cutoffs(maxima, config.target_false_alarm)
                 rules.append((centers, scales, cutoffs, ties))
 
-            for fraction, eve_p_z, is_attack in _scenarios(config):
+            for fraction, eve_p_z, is_attack in scenarios:
                 rng = attack_rng if is_attack else null_rng
                 data = _sample_looks(
                     rng, looks, fraction, eve_p_z,
@@ -366,7 +365,7 @@ def run_cumulative(config):
                         rows.append({
                             "noise_profile": noise, "q_z": q_z, "q_x": q_x,
                             "retained_checks": budget,
-                            "look_counts": tuple(int(value) for value in looks),
+                            "look_counts": look_counts,
                             "calibration_trials_per_state": size,
                             "baseline_fit": fit_id,
                             "intercept_fraction": fraction, "eve_p_z": eve_p_z,
@@ -432,7 +431,7 @@ def plot_alarm_curves(
                 ax.plot(x, approximation, color=line.get_color(), ls="--", lw=1)
         ax.axhline(
             config.target_false_alarm, color="black", ls=":", lw=1,
-            label="5% null target",
+            label=f"{100 * config.target_false_alarm:g}% null target",
         )
         ax.axhline(0.8, color="0.5", ls=":", lw=1, label="80% power")
         ax.set(title=f"{budget} retained checks", xlabel="Interception fraction")

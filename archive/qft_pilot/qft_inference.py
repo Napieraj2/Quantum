@@ -1,7 +1,11 @@
-"""Eve's record likelihoods and posterior for the proposal's recovery test.
+"""Historical Eve likelihoods for the archived factorial pilot.
 
 The likelihood uses the two-pass encoding in Papadopoulos and Linvill,
-§4.1, Eqs. (1)–(2). Phase sampling and CPU/GPU batching are pilot choices.
+§4.1, Eqs. (1)–(2). The pilot marginalizes Alice's private phases with
+16 Monte Carlo samples per observed block. That sampled approximation is
+preserved for artifact reproducibility; it is not an exact phase marginal and
+can make return-leg-only records artificially message-informative.
+CPU/GPU batching changes execution only, not the sampled likelihood model.
 https://arxiv.org/abs/2404.12507v2
 """
 

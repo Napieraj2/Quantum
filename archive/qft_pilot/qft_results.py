@@ -92,6 +92,23 @@ def build_qft_summary(
 ) -> dict[str, object]:
     """Build proposal-facing audit, factor, cost, and false-alarm summaries."""
     enriched = prepare_qft_results(results)
+    required = {
+        "block_qubits",
+        "noise_profile",
+        "eve_count",
+        "intercept_probability",
+        "eve_p_z",
+        "redraw_probability",
+        "compute_backend",
+        "phase_samples",
+        "mean_posterior_confidence",
+        "mean_retained_checks",
+        "mean_transmitted_qubits",
+        "mean_intercepts",
+    }
+    missing = required.difference(enriched.columns)
+    if missing:
+        raise ValueError(f"Missing QFT summary columns: {sorted(missing)}")
     null = enriched[~enriched["is_attack"]].copy()
     attack = enriched[enriched["is_attack"]].copy()
     attack["effective_interception_intensity"] = (
@@ -276,7 +293,7 @@ def plot_qft_summary(
         metrics["target_false_alarm"],
         color="0.3",
         linestyle="--",
-        label="5% target",
+        label=f"{100 * metrics['target_false_alarm']:g}% target",
     )
     axes[0].set(
         xticks=range(len(noise_order)),

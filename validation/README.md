@@ -11,3 +11,5 @@ python -m unittest discover -s validation -p "test_*.py" -v
 - **QFT** checks the exact Eve likelihood and the paired detector study.
 
 Run `python validation/independent_bb84_validation.py` to regenerate the [independent BB84 figure and CSVs](results/). It uses 400,000 transmitted rounds per interception fraction and a fixed seed. The [model notes](MODEL_NOTES.md) explain the formulas and limitations.
+
+The [script review](SCRIPT_REVIEW.md) lists the dependencies, callers, and sources for each script and notebook.

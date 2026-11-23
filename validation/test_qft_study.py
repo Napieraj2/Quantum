@@ -18,6 +18,7 @@ from quantum_study.qft_exchange import (
 )
 from quantum_study.qft_study import (
     _curve_rows,
+    _declarations,
     _study_rows,
     run_qft_study,
 )
@@ -180,6 +181,30 @@ class QFTStudyTests(unittest.TestCase):
                 include_posterior=False,
             )
             self.assertTrue(np.all(paths["final_key_agrees"]))
+
+    def test_interception_stops_after_declaration_while_bob_finishes(self):
+        attempts = 20
+        for qubits in (2, 4):
+            settings = dict(
+                trials=32, qubits=qubits, q_z=0.0, q_x=0.0, attempts=attempts,
+                intercept_probability=1.0, eve_z_probabilities=(0.0,),
+            )
+            paths = simulate_paths(np.random.default_rng(17), **settings)
+            declarations, _ = _declarations(paths, attempts)
+            early_trials = np.flatnonzero(declarations < attempts)
+            self.assertGreater(len(early_trials), 0)
+            for trial in early_trials:
+                declaration = declarations[trial]
+                np.testing.assert_array_equal(paths["check_errors"][trial, declaration:], 0)
+                suffix = paths["posterior"][trial, declaration - 1:]
+                np.testing.assert_array_equal(suffix, np.broadcast_to(suffix[0], suffix.shape))
+            self.assertTrue(paths["final_key_agrees"][early_trials].all())
+
+            without_posterior = simulate_paths(
+                np.random.default_rng(17), include_posterior=False, **settings,
+            )
+            for name, values in without_posterior.items():
+                np.testing.assert_array_equal(values, paths[name])
 
     def test_no_interception_keeps_paired_recovery_uninformed(self):
         for qubits in (2, 4):

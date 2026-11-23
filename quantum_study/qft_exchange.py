@@ -14,6 +14,7 @@ from scipy.special import logsumexp
 
 
 CHECKS_PER_ATTEMPT = 4
+RECOVERY_CONFIDENCE = 0.99
 _TINY = np.finfo(float).tiny
 _NEAR_ONE = 1 - 16 * np.finfo(float).eps
 # Codes 0/1 are Z outcomes, 2/3 are X outcomes, and -1 means no record.
@@ -42,7 +43,7 @@ def _sample_paulis(states, rng, q_z, q_x):
 def _intercept_leg(states, rng, rate, eve_z_probabilities, keep_first):
     """Sample every Eve, retaining the first or last record on each signal."""
     records = np.full(states.shape[:-1], -1, dtype=np.int8)
-    if rate == 0:
+    if not np.any(rate):
         return records
     for p_z in eve_z_probabilities:
         hit = rng.random(records.shape) < rate
@@ -92,7 +93,7 @@ def simulate_paths(
     rng, *, trials, qubits, q_z, q_x, attempts,
     intercept_probability=0.0, eve_z_probabilities=(), include_posterior=True,
 ):
-    """Sample shared physical paths, final key agreement, and optionally Eve's posterior."""
+    """Sample exchanges through the cap, with interception ending at Eve's declaration."""
     if not (q_z >= 0 and q_x >= 0 and q_z + q_x <= 1):
         raise ValueError("q_z and q_x must be nonnegative and sum to at most one")
     width = qubits // 2
@@ -105,8 +106,9 @@ def simulate_paths(
     payload_weights = 2 ** np.arange(width - 1, -1, -1)
     payload_index = secret_bits.reshape(16, blocks, width) @ payload_weights
     secret = rng.integers(16, size=trials)
+    interception_rates = np.full(trials, intercept_probability, dtype=float)
+    log_posterior = np.full((trials, 16), -np.log(16))
     if include_posterior:
-        log_posterior = np.full((trials, 16), -np.log(16))
         posterior = np.empty((trials, attempts, 16))
     errors = np.empty((trials, attempts), dtype=int)
     scores = np.empty((trials, attempts))
@@ -128,12 +130,14 @@ def simulate_paths(
         states = np.stack((np.ones_like(phases), phases), axis=-1) / np.sqrt(2)
         _sample_paulis(states, rng, q_z, q_x)
         forward = _intercept_leg(
-            states, rng, intercept_probability, eve_z_probabilities, keep_first=False,
+            states, rng, interception_rates[:, None, None], eve_z_probabilities,
+            keep_first=False,
         )
         states[..., 1] *= rotations[message]
         _sample_paulis(states, rng, q_z, q_x)
         returned = _intercept_leg(
-            states, rng, intercept_probability, eve_z_probabilities, keep_first=True,
+            states, rng, interception_rates[:, None, None], eve_z_probabilities,
+            keep_first=True,
         )
         states[..., 1] *= phases.conj()
 
@@ -154,12 +158,21 @@ def simulate_paths(
         likelihood[likelihood >= _NEAR_ONE] = 1.0
         scores[:, attempt] = -np.log(np.maximum(likelihood, _TINY)).sum(axis=-1)
 
-        if include_posterior:
-            record_likelihood = _payload_likelihoods(rotations[candidates], forward, returned, q_x)
+        attacking = interception_rates > 0
+        if attacking.any():
+            record_likelihood = _payload_likelihoods(
+                rotations[candidates[attacking]], forward[attacking], returned[attacking], q_x,
+            )
+            active_log_posterior = log_posterior[attacking]
             for block in range(blocks):
                 hypothesis_likelihood = record_likelihood[:, block, payload_index[:, block]]
-                log_posterior += np.log(np.maximum(hypothesis_likelihood, _TINY))
-            log_posterior -= logsumexp(log_posterior, axis=-1, keepdims=True)
+                active_log_posterior += np.log(np.maximum(hypothesis_likelihood, _TINY))
+            active_log_posterior -= logsumexp(active_log_posterior, axis=-1, keepdims=True)
+            log_posterior[attacking] = active_log_posterior
+            # Eve uses her own confidence to stop intercepting on later attempts.
+            declared = np.exp(log_posterior.max(axis=1)) >= RECOVERY_CONFIDENCE
+            interception_rates[declared] = 0.0
+        if include_posterior:
             posterior[:, attempt] = np.exp(log_posterior)
 
     final_key_agrees = np.zeros(trials, dtype=bool)

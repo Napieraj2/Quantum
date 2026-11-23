@@ -5,11 +5,10 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from .qft_exchange import CHECKS_PER_ATTEMPT, simulate_paths
+from .qft_exchange import CHECKS_PER_ATTEMPT, RECOVERY_CONFIDENCE, simulate_paths
 
 
 DETECTORS = ("Pooled check errors", "Joint-check surprisal")
-RECOVERY_CONFIDENCE = 0.99
 TARGET_FALSE_ALARM = 0.05
 DEFAULT_SEED = 20261122
 

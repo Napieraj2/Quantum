@@ -16,7 +16,7 @@ Open a notebook, edit the first code cell if needed, and choose **Run All**. The
 | Notebook | Figures you get |
 | --- | --- |
 | [BB84](BB84.ipynb) | Terminal detection power and cumulative alarm probability for QBER, U2, and U4. Zero interception gives the held-out false-alarm rate. |
-| [QFT repeated secret](QFT_Repeated_Secret.ipynb) | Held-out false alarms, recovery before Bob's alarm, and confidence in each secret bit over 100 attempts. Both detectors see the same transmissions. |
+| [QFT repeated secret](QFT_Repeated_Secret.ipynb) | False alarms, recovery, and bit confidence, plus an X-only coalition comparison of fixed and random alarm looks and Bob's response to interim alarms. |
 | [Gate baseline](Gate_Baseline.ipynb) | Wrong-outcome rates for each X/H round trip and its same-state control. The default runs locally in Aer. |
 
 ## Study scope

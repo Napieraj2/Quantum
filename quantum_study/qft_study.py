@@ -31,16 +31,21 @@ def _standardize(values, centers, scales):
     return scores
 
 
-def _fit_alarm_rule(values, looks, target=TARGET_FALSE_ALARM):
-    selected = values[:, looks - 1]
-    centers = selected.mean(axis=0)
-    scales = selected.std(axis=0)
-    maxima = _standardize(selected, centers, scales).max(axis=1)
+def _fit_cutoff(maxima, target=TARGET_FALSE_ALARM):
     rank = int(np.ceil((1 - target) * len(maxima))) - 1
     cutoff = float(np.partition(maxima, rank)[rank])
     above = np.mean(maxima > cutoff)
     tied = np.mean(maxima == cutoff)
     tie_probability = float(np.clip((target - above) / tied, 0.0, 1.0))
+    return cutoff, tie_probability
+
+
+def _fit_alarm_rule(values, looks, target=TARGET_FALSE_ALARM):
+    selected = values[:, looks - 1]
+    centers = selected.mean(axis=0)
+    scales = selected.std(axis=0)
+    maxima = _standardize(selected, centers, scales).max(axis=1)
+    cutoff, tie_probability = _fit_cutoff(maxima, target)
     return _AlarmRule(looks, centers, scales, cutoff, tie_probability)
 
 
@@ -57,11 +62,16 @@ def _first_alarms(values, rule, tie_draws):
     return np.where(has_alarm, rule.looks[first], values.shape[1] + 1)
 
 
-def _detector_statistics(paths):
+def _check_totals(paths):
     errors = np.cumsum(np.asarray(paths["check_errors"]), axis=1)
+    joint = np.cumsum(np.asarray(paths["joint_score"]), axis=1)
+    return errors, joint
+
+
+def _detector_statistics(paths):
+    errors, joint = _check_totals(paths)
     checks = CHECKS_PER_ATTEMPT * np.arange(1, errors.shape[1] + 1)
     pooled = errors / checks
-    joint = np.cumsum(np.asarray(paths["joint_score"]), axis=1)
     return dict(zip(DETECTORS, (pooled, joint)))
 
 
@@ -173,6 +183,21 @@ def _curve_rows(
     return rows
 
 
+def _percentage_looks(attempts):
+    return np.ceil(attempts * np.asarray((0.25, 0.5, 1.0))).astype(int)
+
+
+def _validate_study(attempts, trials, block_qubits, intercept_probability):
+    if type(attempts) is not int or attempts < 4:
+        raise ValueError("attempts must be an integer of at least four")
+    if type(trials) is not int or trials < 1:
+        raise ValueError("trials must be a positive integer")
+    if type(block_qubits) is not int or block_qubits not in (2, 4):
+        raise ValueError("block_qubits must be 2 or 4")
+    if not 0 <= intercept_probability <= 1:
+        raise ValueError("intercept_probability must be between zero and one")
+
+
 def run_qft_study(
     attempts=100,
     trials=256,
@@ -189,14 +214,7 @@ def run_qft_study(
     stationary-null alarm rules, measuring held-out false alarms, and the
     two-Eve attack. Detector comparisons share every physical attack path.
     """
-    if type(attempts) is not int or attempts < 4:
-        raise ValueError("attempts must be an integer of at least four")
-    if type(trials) is not int or trials < 1:
-        raise ValueError("trials must be a positive integer")
-    if type(block_qubits) is not int or block_qubits not in (2, 4):
-        raise ValueError("block_qubits must be 2 or 4")
-    if not 0 <= intercept_probability <= 1:
-        raise ValueError("intercept_probability must be between zero and one")
+    _validate_study(attempts, trials, block_qubits, intercept_probability)
     eve_z_probabilities = tuple(eve_z_probabilities)
     if not eve_z_probabilities or any(
         not 0 <= probability <= 1
@@ -204,7 +222,7 @@ def run_qft_study(
     ):
         raise ValueError("eve_z_probabilities must lie between zero and one")
 
-    looks = np.ceil(attempts * np.asarray((0.25, 0.5, 1.0))).astype(int)
+    looks = _percentage_looks(attempts)
     fit_root, null_root, attack_root, null_ties, attack_ties = (
         np.random.SeedSequence(seed).spawn(5)
     )

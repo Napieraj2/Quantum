@@ -10,6 +10,7 @@ from archive.qft_pilot.qft_protocol import (
     qft_integer,
     qft_message,
 )
+from quantum_study.qft_alarm import _look_schedules, _replay_alarms
 from quantum_study.qft_exchange import (
     _null_decoding_probabilities,
     _payload_likelihoods,
@@ -25,6 +26,35 @@ from quantum_study.qft_study import (
 
 
 class QFTStudyTests(unittest.TestCase):
+    def test_random_alarm_looks_include_the_end_and_vary_by_session(self):
+        schedules = _look_schedules(np.random.default_rng(17), 64, 100, (2, 4))
+        self.assertTrue((schedules["Percentage"] == [25, 50, 100]).all())
+        random = schedules["Random"]
+        np.testing.assert_array_equal(random[:, -1], 100)
+        for looks in random:
+            interim = looks[looks < 100]
+            self.assertTrue((interim > 0).all())
+            self.assertTrue((np.diff(interim) > 0).all())
+        self.assertEqual(set((random < 100).sum(axis=1) + 1), {2, 3, 4})
+
+    def test_interim_alarm_reset_uses_only_checks_from_the_new_window(self):
+        totals = np.array([[2, 5, 5, 5], [0, 0, 0, 6], [0, 5, 9, 14], [0, 0, 0, 0]])
+        looks = np.array([[2, 4, 4, 4], [1, 3, 4, 4], [2, 3, 4, 4], [1, 2, 3, 4]])
+        rule = (np.arange(1, 5), np.ones(4), 1.0, 0.0)
+        first, reset, final = _replay_alarms(totals, looks, rule, np.ones((4, 4)))
+        np.testing.assert_array_equal(first, [2, 4, 2, 5])
+        np.testing.assert_array_equal(reset, [True, False, True, False])
+        np.testing.assert_array_equal(final, [False, True, True, False])
+
+    def test_cutoff_tie_draw_restarts_only_after_a_reset(self):
+        looks = np.array([[1, 2, 4], [1, 2, 4]])
+        ties = np.array([[0.1, 0.9, 0.1], [0.9, 0.1, 0.1]])
+        rule = (np.zeros(4), np.zeros(4), 0.0, 0.5)
+        first, reset, final = _replay_alarms(np.zeros((2, 4)), looks, rule, ties)
+        np.testing.assert_array_equal(first, [1, 5])
+        np.testing.assert_array_equal(reset, [True, False])
+        np.testing.assert_array_equal(final, [False, False])
+
     def test_return_only_records_do_not_reveal_the_message(self):
         for qubits in (2, 4):
             forward = np.full(qubits, -1)

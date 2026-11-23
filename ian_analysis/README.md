@@ -1,0 +1,26 @@
+# Independent BB84 detector calculations
+
+This folder contains a separate numerical check of pooled and conditioned BB84 error detectors. The calculations use one disclosed sample and known no-attack error rates. The QFT and posterior modules check smaller mathematical pieces of the repeated-secret model.
+
+## Model
+
+The BB84 example uses 100 retained, matching-basis bits, split evenly across Z0, Z1, X+ and X-. The assumed benign wrong-bit rates are 0.002 in the Z basis and 0.038 in the X basis. These are model parameters, not measured device error rates.
+
+Eve intercepts each signal with probability `f`, measures in Z with probability `r` (otherwise X), and resends. An independent symmetric baseline bit flip gives the state-dependent error probabilities. The detector cutoffs are nonrandomized and use a nominal false-alarm limit of 5%.
+
+## Results
+
+The script calculates exact binomial probabilities over all possible four-state error counts and checks them with Monte Carlo samples. For uniform Eve at `f = 0.025`, pooled QBER has 11.87% detection power and the basis/state scores each have 16.69%. Their realized false-alarm rates are 4.93% and 3.14%, respectively. The result does not establish an equal-size advantage.
+
+U2 and U4 agree in this example because both prepared states within each basis have the same known baseline error rate. The basis weights need not remain equal when rates are estimated separately or when the benign noise model changes.
+
+## Files
+
+- `bb84_power_check.py` — exact single-look cutoffs and power, Monte Carlo estimates, and a normal approximation.
+- `qft_ideal_check.py` — ideal phase encoding and inverse-QFT decoding for 2- and 4-qubit blocks.
+- `recovery_posterior.py` — posterior normalization over 16 supplied secret likelihoods and a recovery-before-alarm decision rule.
+- `test_analysis.py` — tests for model probabilities, score behavior, QFT decoding, and posterior logic.
+- `RESULTS_AND_DERIVATION.md` — equations, numerical settings, results, and limitations.
+- `results/` — the exact BB84 power CSV and figure.
+
+The BB84 calculation fixes the number of bits per state and treats their errors as independent. It does not model estimated baseline rates, sequential alarm calibration, or temporal correlations. The QFT script checks ideal decoding algebra; the posterior module accepts candidate likelihoods rather than generating Eve observations. Neither module establishes repeated-secret recovery probabilities or key security.

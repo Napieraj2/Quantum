@@ -440,7 +440,7 @@ def plot_alarm_curves(
         ax.grid(alpha=0.2)
     axes[0, 0].set_ylabel("Probability of any alarm" if cumulative else "Alarm probability")
     axes[0, -1].legend(loc="lower right", fontsize=8)
-    kind = "Cumulative alarms" if cumulative else "Terminal power"
+    kind = "Multiple scheduled alarm decisions" if cumulative else "Final alarm decision only"
     fig.suptitle(
         f"{kind} · {profile} · Eve P(Z)={eve_p_z:g}\n"
         "f=0 is held-out noise-only evaluation"

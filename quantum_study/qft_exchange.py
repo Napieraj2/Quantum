@@ -11,6 +11,8 @@ proposal's λ=1 case.
 https://arxiv.org/abs/0901.0960v2
 """
 
+from functools import cache
+
 import numpy as np
 from scipy.special import logsumexp
 
@@ -37,6 +39,10 @@ def _bits(width):
 def _rotations(qubits):
     dimension = 2**qubits
     weights = 2 ** np.arange(qubits - 1, -1, -1)
+    if qubits == 16:
+        # Reduce the angle before taking the exponential to keep precision.
+        periods = 2 ** np.arange(1, qubits + 1)
+        return np.exp(2j * np.pi * (np.arange(dimension)[:, None] % periods) / periods)
     return np.exp(2j * np.pi * np.outer(np.arange(dimension), weights) / dimension)
 
 
@@ -73,10 +79,38 @@ def _intercept_leg(states, rng, rate, eve_z_probabilities, keep_first):
     return records
 
 
+# Periodic expansion of the Fourier projection in Papadopoulos and Linvill, §4.1, Eq. (3).
+def _null_decoding_probabilities_8(coherence, rotations):
+    """Expand the periodic local factors without an outcome×qubit tensor."""
+    payload_count = coherence.shape[-2]
+    batch_count = int(np.prod(coherence.shape[:-2]))
+    # Bound the largest recurrence array near 16 MiB of float64.
+    payload_chunk = max(1, (1 << 21) // (batch_count * len(rotations)))
+    payload_chunk = min(payload_count, payload_chunk)
+    averaged = np.zeros(coherence.shape[:-2] + (len(rotations),))
+    for start in range(0, payload_count, payload_chunk):
+        selected = coherence[..., start:start + payload_chunk, :]
+        probabilities = np.ones(selected.shape[:-1] + (1,))
+        for signal in range(8):
+            span = 1 << signal
+            factor = (
+                selected[..., signal, None]
+                * rotations[:span, signal].conj()
+            ).real
+            factor += 0.5
+            expanded = np.empty(selected.shape[:-1] + (2 * span,))
+            np.multiply(probabilities, factor, out=expanded[..., :span])
+            # The second half-period flips the local contribution's sign.
+            np.subtract(1, factor, out=factor)
+            np.multiply(probabilities, factor, out=expanded[..., span:])
+            probabilities = expanded
+        averaged += probabilities.sum(axis=-2) / payload_count
+    return averaged
+
+
 # Project density-matrix calculation using the proposal §2 Pauli channel and
 # the decoder from Papadopoulos and Linvill, §4.1, Eq. (3).
-def _null_decoding_probabilities(phases, candidates, rotations, q_z, q_x):
-    """Average Bob's null outcome probabilities over unknown payload values."""
+def _null_coherence(phases, candidates, rotations, q_z, q_x):
     # A local Pauli channel leaves equatorial states with diagonals (1/2, 1/2).
     # Its only changing entry is the coherence rho[1, 0].
     coherence_scale = 1 - q_z - 2 * q_x
@@ -85,17 +119,111 @@ def _null_decoding_probabilities(phases, candidates, rotations, q_z, q_x):
     coherence = coherence[..., None, :] * rotations[candidates]
     coherence = coherence_scale * coherence + q_z * coherence.conj()
     coherence *= phases.conj()[..., None, :]
+    return coherence
+
+
+def _null_decoding_probabilities(phases, candidates, rotations, q_z, q_x):
+    """Average Bob's null outcome probabilities over unknown payload values."""
+    coherence = _null_coherence(phases, candidates, rotations, q_z, q_x)
+    if phases.shape[-1] == 8:
+        return _null_decoding_probabilities_8(coherence, rotations)
     # A Fourier basis vector factors into local phase states. Projection of the
     # product density onto that vector is the product of local probabilities.
     probabilities = (0.5 + (coherence[..., None, :] * rotations.conj()).real).prod(axis=-1)
     return probabilities.mean(axis=-2)
 
 
+# Use the periodic Fourier factors in Papadopoulos and Linvill, §4.1, Eq. (3).
+def _decode_wide_block(states, rotations, rng):
+    """Sample the Fourier measurement from its least significant bit upward."""
+    coherence = states[..., 1] * states[..., 0].conj()
+    outcomes = np.zeros(coherence.shape[:-1], dtype=int)
+    draws = rng.random(coherence.shape)
+    for signal in range(coherence.shape[-1]):
+        # Only the lowest signal + 1 bits affect this local factor. Summing
+        # over later bits leaves a normalized conditional on the known suffix.
+        rotation = rotations[outcomes, signal]
+        p_zero = 0.5 + (coherence[..., signal] * rotation.conj()).real
+        bit = draws[..., signal] >= p_zero.clip(0.0, 1.0)
+        outcomes |= bit.astype(int) << signal
+    return outcomes
+
+
+# Proposal §2's joint score needs only the outcomes consistent with the
+# observed checks. Each summand is a Fourier projection as in §4.1, Eq. (3).
+def _fourier_pattern_probability(coherence, rotations, outcomes):
+    """Sum over output completions and average over possible encoded payloads."""
+    output_phases = rotations[outcomes].conj()
+    probabilities = np.ones(coherence.shape[:-1] + (outcomes.shape[-1],))
+    for signal in range(coherence.shape[-1]):
+        local = coherence[..., signal, None]
+        rotation = output_phases[..., None, :, signal]
+        probabilities *= 0.5 + (local * rotation).real
+    return probabilities.sum(axis=-1).mean(axis=-1)
+
+
+# Characteristic functions of the centered suffix have even real parts and
+# odd imaginary parts. Interpolate Re F(f) and Im F(f)/f in f² on [0, 1].
+@cache
+def _half_frequency_transfer():
+    # For a centered suffix x in [-1/2, 1/2], the cosine Taylor remainder
+    # after 14 terms is at most pi**28 / 28! before interpolation.
+    angles = np.pi * (np.arange(14) + 0.5) / 14
+    nodes = (1 - np.cos(angles)) / 2
+    grid = np.sqrt(nodes)
+    shifts = np.stack((grid / 2, (1 + grid) / 2, (1 - grid) / 2), axis=-1)
+    frequencies = np.append(shifts.ravel(), 0.5)
+    weights = np.sin(angles)
+    weights[1::2] *= -1
+    interpolation = weights / (frequencies[:, None]**2 - nodes)
+    interpolation /= interpolation.sum(axis=1, keepdims=True)
+    real_transfer = interpolation[:-1].T.copy()
+    imag_transfer = (interpolation[:-1] * frequencies[:-1, None]).T.copy()
+    return grid, real_transfer, imag_transfer, interpolation[-1]
+
+
+# Check-bit marginals from the same Fourier factors, §4.1, Eq. (3).
+def _fourier_bit_one_probabilities(coherence):
+    """Approximate marginal probabilities in decoded word order (MSB first)."""
+    grid, real_transfer, imag_transfer, at_half = _half_frequency_transfer()
+    cosine = np.cos(np.pi * grid / 2)
+    sine = np.sin(np.pi * grid / 2)
+    marginal = np.empty(coherence.shape[:-2] + (coherence.shape[-1],))
+    shape = coherence.shape[:-1] + (len(grid),)
+    real = np.ones(shape)
+    imag_scaled = np.zeros(shape)
+    for signal in range(coherence.shape[-1]):
+        # x = (suffix + 1/2)/2**signal - 1/2 centers the suffix. The next
+        # bit has P(1 | x) = 1/2 - Re(aligned * exp(-i*pi*x)).
+        rotation = np.exp(-1j * np.pi * (0.5 - 0.5**(signal + 1)))
+        aligned = coherence[..., signal] * rotation
+        a, b = aligned.real[..., None], aligned.imag[..., None]
+        weighted = (a * real - 0.5 * b * imag_scaled).mean(axis=-2)
+        marginal[..., signal] = 0.5 - weighted @ at_half
+        if signal + 1 == coherence.shape[-1]:
+            break
+
+        # Appending bit d sends x to (x + d - 1/2)/2. Its two conditional
+        # probabilities shift F(f/2) to F((f+1)/2) and F((f-1)/2); the
+        # negative frequency is the conjugate of the positive one.
+        r_half, r_plus, r_minus = np.moveaxis((real @ real_transfer).reshape(shape + (3,)), -1, 0)
+        i_half, i_plus, i_minus = np.moveaxis((imag_scaled @ imag_transfer).reshape(shape + (3,)), -1, 0)
+        real = cosine * r_half - sine * (a * (i_plus - i_minus) + b * (r_plus - r_minus))
+        imag = cosine * i_half + sine * (a * (r_plus + r_minus) - b * (i_plus + i_minus))
+        imag_scaled = imag / grid
+    return marginal[..., ::-1]
+
+
 # Adapt the weighted error score in proposal §2 to QFT's prepared phases and
 # announced checks. Use the marginal error probability for each retained bit.
 def _prepared_state_score(null, candidate_checks, values, mismatches):
     possible_errors = candidate_checks != values[..., None, :]
-    rates = (null[..., None] * possible_errors).sum(axis=-2).clip(0.0, 1.0)
+    rates = (null[..., None] * possible_errors).sum(axis=-2)
+    return _weighted_check_errors(rates, mismatches)
+
+
+def _weighted_check_errors(rates, mismatches):
+    rates = rates.clip(0.0, 1.0)
     variable = (rates > 1 - _NEAR_ONE) & (rates < _NEAR_ONE)
     weights = np.divide(
         1 - 2 * rates, rates * (1 - rates),
@@ -121,14 +249,19 @@ def _payload_likelihoods(encodings, last_forward, first_return, q_x):
     return np.where(informative[..., None, :], paired, 1).prod(axis=-1)
 
 
-# Project input checks for proposal §2's 2- and 4-qubit blocks and per-leg interception.
+# Proposal §2 uses 2- and 4-qubit blocks. The block-size comparison also
+# uses dedicated one-qubit blocks and single eight- or sixteen-qubit blocks.
+def _checks_per_attempt(qubits):
+    return max(CHECKS_PER_ATTEMPT, qubits - 4)
+
+
 def _validate_path_settings(trials, attempts, qubits, intercept_probability):
     if type(trials) is not int or trials < 1:
         raise ValueError("trials must be a positive integer")
     if type(attempts) is not int or attempts < 1:
         raise ValueError("attempts must be a positive integer")
-    if type(qubits) is not int or qubits not in (2, 4):
-        raise ValueError("qubits must be 2 or 4")
+    if type(qubits) is not int or qubits not in (1, 2, 4, 8, 16):
+        raise ValueError("qubits must be 1, 2, 4, 8, or 16")
     if not 0 <= intercept_probability <= 1:
         raise ValueError("intercept_probability must be between zero and one")
 
@@ -158,15 +291,21 @@ def simulate_paths(
     eve_z_probabilities = _eve_biases(eve_z_probabilities)
 
     # Proposal §2 uses the same secret in each attempt and fresh checks in each block.
-    width = qubits // 2
-    blocks = 4 // width
+    single_qubit = qubits == 1
+    wide_block = qubits == 16
+    checks_per_attempt = _checks_per_attempt(qubits)
+    check_axis = 1 if single_qubit else -1
+    width = min(4, max(1, qubits // 2))
+    checks_per_block = qubits - width
+    payload_blocks = 4 // width
+    blocks = (4 + checks_per_attempt) // qubits
     rotations = _rotations(qubits)
     block_bits = _bits(qubits)
     payload_bits = _bits(width)
     secret_bits = _bits(4)
     weights = 2 ** np.arange(qubits - 1, -1, -1)
     payload_weights = 2 ** np.arange(width - 1, -1, -1)
-    payload_index = secret_bits.reshape(16, blocks, width) @ payload_weights
+    payload_index = secret_bits.reshape(16, payload_blocks, width) @ payload_weights
     secret = rng.integers(16, size=trials)
     interception_rates = np.full(trials, intercept_probability, dtype=float)
     log_posterior = np.full((trials, 16), -np.log(16))
@@ -180,16 +319,26 @@ def simulate_paths(
 
     for attempt in range(attempts):
         # Hide the check positions until after measurement as in Papadopoulos
-        # and Linvill, §6.1. Proposal §2 assigns half the block to checks.
-        order = rng.random(signal_shape).argsort(axis=-1)
-        checks = np.sort(order[..., :width], axis=-1)
-        payload = np.sort(order[..., width:], axis=-1)
-        values = rng.integers(2, size=checks.shape)
-        check_message = (values * weights[checks]).sum(axis=-1)
-        candidates = check_message[..., None] + weights[payload] @ payload_bits.T
-        message = np.take_along_axis(
-            candidates, payload_index[secret, :, None], axis=-1,
-        )[..., 0]
+        # and Linvill, §6.1. The 16-qubit extension keeps four payload bits.
+        order = rng.random(signal_shape).argsort(axis=check_axis)
+        if single_qubit:
+            # Randomly assign whole blocks to checks when a block is one bit.
+            checks = np.sort(order[:, :CHECKS_PER_ATTEMPT], axis=1)
+            payload = np.sort(order[:, CHECKS_PER_ATTEMPT:], axis=1)
+            values = rng.integers(2, size=checks.shape)
+            message = np.empty(signal_shape, dtype=int)
+            np.put_along_axis(message, checks, values, axis=1)
+            np.put_along_axis(message, payload, secret_bits[secret, :, None], axis=1)
+            message = message[..., 0]
+        else:
+            checks = np.sort(order[..., :checks_per_block], axis=-1)
+            payload = np.sort(order[..., checks_per_block:], axis=-1)
+            values = rng.integers(2, size=checks.shape)
+            check_message = (values * weights[checks]).sum(axis=-1)
+            candidates = check_message[..., None] + weights[payload] @ payload_bits.T
+            message = np.take_along_axis(
+                candidates, payload_index[secret, :, None], axis=-1,
+            )[..., 0]
 
         # Follow the phase sequence in Papadopoulos and Linvill, §4.1, Eqs. (1)–(3).
         # Proposal §2 adds channel noise and the Eve chain on both legs.
@@ -209,38 +358,67 @@ def simulate_paths(
         states[..., 1] *= phases.conj()
 
         # Sample the inverse-QFT measurement in Papadopoulos and Linvill, Eq. (3).
-        amplitudes = states[..., None, :, 0] + states[..., None, :, 1] * rotations.conj()
-        output_probabilities = (abs(amplitudes)**2 / 2).prod(axis=-1)
-        cumulative = output_probabilities.cumsum(axis=-1)
-        cumulative /= cumulative[..., -1:]
-        outcomes = (rng.random((trials, blocks, 1)) > cumulative).sum(axis=-1)
+        if wide_block:
+            outcomes = _decode_wide_block(states, rotations, rng)
+        else:
+            amplitudes = states[..., None, :, 0] + states[..., None, :, 1] * rotations.conj()
+            output_probabilities = (abs(amplitudes)**2 / 2).prod(axis=-1)
+            cumulative = output_probabilities.cumsum(axis=-1)
+            cumulative /= cumulative[..., -1:]
+            outcomes = (rng.random((trials, blocks, 1)) > cumulative).sum(axis=-1)
         decoded_blocks = block_bits[outcomes]
-        observed = np.take_along_axis(decoded_blocks, checks, axis=-1)
+        observed = np.take_along_axis(decoded_blocks, checks, axis=check_axis)
         mismatches = observed != values
         errors[:, attempt] = mismatches.sum(axis=(1, 2))
 
         # Proposal §2 uses joint check-pattern likelihoods. The notebook adds
         # their negative logs across blocks as Bob's score.
-        null = _null_decoding_probabilities(phases, candidates, rotations, q_z, q_x)
-        candidate_checks = block_bits[:, checks].transpose(1, 2, 0, 3)
-        same_pattern = (candidate_checks == observed[..., None, :]).all(axis=-1)
-        likelihood = (null * same_pattern).sum(axis=-1)
+        if wide_block:
+            coherence = _null_coherence(phases, candidates, rotations, q_z, q_x)
+            # The encoded candidates and the possible decoded words share the
+            # same payload positions, but the observed check values can differ.
+            check_offset = ((observed - values) * weights[checks]).sum(axis=-1)
+            output_words = candidates + check_offset[..., None]
+            likelihood = _fourier_pattern_probability(coherence, rotations, output_words)
+            if include_prepared_state:
+                p_one = _fourier_bit_one_probabilities(coherence)
+                check_ones = np.take_along_axis(p_one, checks, axis=-1)
+                rates = np.where(values != 0, 1 - check_ones, check_ones)
+                prepared_state_scores[:, attempt] = _weighted_check_errors(rates, mismatches)
+        else:
+            if single_qubit:
+                check_phases = np.take_along_axis(phases, checks, axis=1)
+                null = _null_decoding_probabilities(check_phases, values, rotations, q_z, q_x)
+                candidate_checks = block_bits
+            else:
+                null = _null_decoding_probabilities(phases, candidates, rotations, q_z, q_x)
+                candidate_checks = block_bits[:, checks].transpose(1, 2, 0, 3)
+            same_pattern = (candidate_checks == observed[..., None, :]).all(axis=-1)
+            likelihood = (null * same_pattern).sum(axis=-1)
+            if include_prepared_state:
+                prepared_state_scores[:, attempt] = _prepared_state_score(
+                    null, candidate_checks, values, mismatches,
+                )
         likelihood[likelihood >= _NEAR_ONE] = 1.0
         scores[:, attempt] = -np.log(np.maximum(likelihood, _TINY)).sum(axis=-1)
-        if include_prepared_state:
-            prepared_state_scores[:, attempt] = _prepared_state_score(
-                null, candidate_checks, values, mismatches,
-            )
 
         # Proposal §2 updates Eve's probabilities over the 16 secrets. The
         # project stops Eve's interception after she makes a guess.
         attacking = interception_rates > 0
         if attacking.any():
+            forward_records, return_records = forward[attacking], returned[attacking]
+            if single_qubit:
+                # A dedicated check's disclosed value gives no evidence about the key.
+                forward_records = np.take_along_axis(forward_records, payload[attacking], axis=1)
+                return_records = np.take_along_axis(return_records, payload[attacking], axis=1)
+                encodings = rotations
+            else:
+                encodings = rotations[candidates[attacking]]
             record_likelihood = _payload_likelihoods(
-                rotations[candidates[attacking]], forward[attacking], returned[attacking], q_x,
+                encodings, forward_records, return_records, q_x,
             )
             active_log_posterior = log_posterior[attacking]
-            for block in range(blocks):
+            for block in range(payload_blocks):
                 hypothesis_likelihood = record_likelihood[:, block, payload_index[:, block]]
                 active_log_posterior += np.log(np.maximum(hypothesis_likelihood, _TINY))
             active_log_posterior -= logsumexp(active_log_posterior, axis=-1, keepdims=True)
@@ -252,7 +430,7 @@ def simulate_paths(
 
     # Extract the payload as in Papadopoulos and Linvill, §4.1, "Extraction."
     # The notebook compares Bob's final decoded key with Alice's as a project policy.
-    final_key = np.take_along_axis(decoded_blocks, payload, axis=-1).reshape(trials, 4)
+    final_key = np.take_along_axis(decoded_blocks, payload, axis=check_axis).reshape(trials, 4)
     final_key_agrees = (final_key == secret_bits[secret]).all(axis=1)
 
     # Project outputs for the detector comparison and bit-confidence plots.

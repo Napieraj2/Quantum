@@ -5,6 +5,10 @@ from pandas.testing import assert_frame_equal
 
 from quantum_study.qft_alarm import _look_schedules, _replay_alarms
 from quantum_study.qft_exchange import (
+    _decode_wide_block,
+    _fourier_bit_one_probabilities,
+    _fourier_pattern_probability,
+    _null_coherence,
     _null_decoding_probabilities,
     _payload_likelihoods,
     _prepared_state_score,
@@ -204,14 +208,15 @@ class QFTStudyTests(unittest.TestCase):
 
     def test_session_cost_continues_after_eves_declaration(self):
         paths = {"secret": np.zeros(2, dtype=int), "final_key_agrees": np.ones(2, dtype=bool)}
-        for block_qubits in (2, 4):
+        for block_qubits in (1, 2, 4, 8, 16):
             summary, *_ = _study_rows(
                 paths, "Pooled check errors", np.array([5, 3]), np.full(2, 5),
                 np.array([2, 2]), np.zeros(2, dtype=int), attempts=4, block_qubits=block_qubits,
             )
             self.assertEqual(summary["correct_recovery_rate"], 1.0)
-            self.assertEqual(summary["mean_checks"], 14)
-            self.assertEqual(summary["mean_transmitted_qubits"], 56)
+            expected = (42, 112) if block_qubits == 16 else (14, 56)
+            self.assertEqual(summary["mean_checks"], expected[0])
+            self.assertEqual(summary["mean_transmitted_qubits"], expected[1])
 
     def test_accepted_key_exposure_uses_acceptance_denominator(self):
         attempts = 4
@@ -256,8 +261,8 @@ class QFTStudyTests(unittest.TestCase):
         self.assertEqual(no_acceptance["exposed_accepted_keys"], 0)
         self.assertTrue(np.isnan(no_acceptance["accepted_key_exposure_rate"]))
 
-    def test_noiseless_final_key_agrees_for_both_block_sizes(self):
-        for qubits in (2, 4):
+    def test_noiseless_checks_and_final_key_agree_for_all_block_sizes(self):
+        for qubits in (1, 2, 4, 8, 16):
             paths = simulate_paths(
                 np.random.default_rng(17),
                 trials=8,
@@ -266,8 +271,99 @@ class QFTStudyTests(unittest.TestCase):
                 q_x=0.0,
                 attempts=2,
                 include_posterior=False,
+                include_prepared_state=True,
             )
             self.assertTrue(np.all(paths["final_key_agrees"]))
+            for metric in ("check_errors", "joint_score", "prepared_state_score"):
+                np.testing.assert_array_equal(paths[metric], 0)
+
+    def test_sixteen_qubit_fourier_helpers_match_dense_distribution(self):
+        qubits = 16
+        q_z, q_x = 0.002, 0.038
+        rotations = _rotations(qubits)
+        phases = np.exp(1j * np.linspace(0.17, 2.41, qubits))[None, None]
+        weights = 2 ** np.arange(qubits - 1, -1, -1)
+        payload = np.array([1, 6, 11, 14])
+        payload_bits = (
+            np.arange(16)[:, None] >> np.arange(3, -1, -1)
+        ) & 1
+        payload_words = payload_bits @ weights[payload]
+        payload_mask = weights[payload].sum()
+        candidates = ((0xA53C & ~payload_mask) + payload_words)[None, None]
+        outcomes = ((0x39A7 & ~payload_mask) + payload_words)[None, None]
+
+        coherence = _null_coherence(
+            phases, candidates, rotations, q_z, q_x,
+        )
+        scale = 1 - q_z - 2 * q_x
+        direct_coherence = phases / 2
+        direct_coherence = scale * direct_coherence + q_z * direct_coherence.conj()
+        direct_coherence = direct_coherence[..., None, :] * rotations[candidates]
+        direct_coherence = scale * direct_coherence + q_z * direct_coherence.conj()
+        direct_coherence *= phases.conj()[..., None, :]
+        np.testing.assert_allclose(coherence, direct_coherence, atol=2e-16, rtol=0)
+
+        # Independently enumerate all 65,536 decoded words, but accumulate one
+        # local Fourier factor at a time to avoid an outcome-by-signal tensor.
+        probabilities = np.ones((16, 2**qubits))
+        for signal in range(qubits):
+            probabilities *= 0.5 + (
+                direct_coherence[0, 0, :, signal, None]
+                * rotations[:, signal].conj()
+            ).real
+        dense = probabilities.mean(axis=0)
+        np.testing.assert_allclose(dense.sum(), 1.0, atol=2e-15, rtol=0)
+
+        pattern = _fourier_pattern_probability(coherence, rotations, outcomes)
+        np.testing.assert_allclose(
+            pattern[0, 0], dense[outcomes[0, 0]].sum(), atol=2e-15, rtol=0,
+        )
+
+        decoded_bits = (
+            np.arange(2**qubits)[:, None]
+            >> np.arange(qubits - 1, -1, -1)
+        ) & 1
+        expected_marginals = dense @ decoded_bits
+        np.testing.assert_allclose(
+            _fourier_bit_one_probabilities(coherence)[0, 0],
+            expected_marginals,
+            atol=1e-13,
+            rtol=0,
+        )
+
+        # Fourier-encoded basis words decode deterministically, including both
+        # endpoint words and mixed high/low-bit patterns.
+        words = np.array([0, 1, 0x00FF, 0x5A3C, 0x8000, 0xFFFF])
+        states = np.stack(
+            (np.ones_like(rotations[words]), rotations[words]), axis=-1,
+        ) / np.sqrt(2)
+        np.testing.assert_array_equal(
+            _decode_wide_block(states, rotations, np.random.default_rng(23)),
+            words,
+        )
+
+    def test_one_qubit_full_x_interception_recovers_each_payload_bit(self):
+        paths = simulate_paths(
+            np.random.default_rng(17), trials=32, qubits=1, q_z=0.0, q_x=0.0,
+            attempts=2, intercept_probability=1.0, eve_z_probabilities=(0.0,),
+        )
+        first = paths["posterior"][:, 0]
+        np.testing.assert_array_equal(first.argmax(axis=1), paths["secret"])
+        np.testing.assert_allclose(first.max(axis=1), 1.0)
+        np.testing.assert_array_equal(paths["posterior"][:, 1], first)
+        np.testing.assert_array_equal(paths["check_errors"][:, 1], 0)
+        self.assertTrue(paths["final_key_agrees"].all())
+
+    def test_eight_qubit_phase_flip_probabilities_match_direct_formula(self):
+        q_x = 0.038
+        phases = np.exp(1j * np.linspace(0.17, 2.41, 8))[None, None]
+        candidates = np.arange(16)[None, None]
+        result = _null_decoding_probabilities(phases, candidates, _rotations(8), 0.0, q_x)
+        differences = candidates[0, 0, :, None] - np.arange(256)
+        angles = np.pi * differences[..., None] / 2 ** np.arange(8)
+        # With only Pauli Z noise, undoing the scramble cancels all private phases.
+        expected = (0.5 + 0.5 * (1 - 2 * q_x) ** 2 * np.cos(angles)).prod(axis=-1).mean(axis=0)
+        np.testing.assert_allclose(result[0, 0], expected, atol=1e-14, rtol=0)
 
     def test_interception_stops_after_declaration_while_bob_finishes(self):
         attempts = 20
@@ -294,7 +390,7 @@ class QFTStudyTests(unittest.TestCase):
                 np.testing.assert_array_equal(values, paths[name])
 
     def test_no_interception_keeps_paired_recovery_uninformed(self):
-        for qubits in (2, 4):
+        for qubits in (1, 2, 4, 8, 16):
             summary, curves = run_qft_study(
                 attempts=4,
                 trials=8,

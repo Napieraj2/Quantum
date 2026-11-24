@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 
 from .qft_exchange import (
-    CHECKS_PER_ATTEMPT,
     RECOVERY_CONFIDENCE,
+    _checks_per_attempt,
     _eve_biases,
     _validate_path_settings,
     simulate_paths,
@@ -89,9 +89,9 @@ def _check_totals(paths):
 
 # The QFT notebook uses proposal §2's pooled error rate and check-pattern
 # likelihoods. Its joint score sums the negative log likelihoods.
-def _detector_statistics(paths):
+def _detector_statistics(paths, checks_per_attempt):
     errors, joint = _check_totals(paths)
-    checks = CHECKS_PER_ATTEMPT * np.arange(1, errors.shape[1] + 1)
+    checks = checks_per_attempt * np.arange(1, errors.shape[1] + 1)
     pooled = errors / checks
     scores = dict(zip(DETECTORS, (pooled, joint)))
     if "prepared_state_score" in paths:
@@ -142,8 +142,9 @@ def _study_rows(
     inconclusive = ~(alarm_first | declaration_first)
     # Count the costs requested in proposal §3 through Bob's alarm or the cap (§2).
     session_attempt = np.minimum(alarm_attempt, attempts)
-    blocks_per_attempt = 4 // (block_qubits // 2)
-    transmitted_per_attempt = 2 * block_qubits * blocks_per_attempt
+    # All payload and check qubits traverse both legs.
+    checks_per_attempt = _checks_per_attempt(block_qubits)
+    transmitted_per_attempt = 2 * (4 + checks_per_attempt)
 
     # Project acceptance rule in QFT_Repeated_Secret.ipynb. Use Bob's alarms
     # through the final decision and require his decoded key to match Alice's.
@@ -160,7 +161,7 @@ def _study_rows(
         "correct_recovery_rate": np.mean(correct),
         "incorrect_recovery_rate": np.mean(incorrect),
         "inconclusive_rate": np.mean(inconclusive),
-        "mean_checks": np.mean(CHECKS_PER_ATTEMPT * session_attempt),
+        "mean_checks": np.mean(checks_per_attempt * session_attempt),
         "mean_transmitted_qubits": np.mean(
             session_attempt * transmitted_per_attempt
         ),
@@ -276,9 +277,10 @@ def run_qft_study(
     )
 
     # Use the same checks for both detectors, as in proposal §2's paired comparison.
-    fit_statistics = _detector_statistics(fitted_null)
-    null_statistics = _detector_statistics(heldout_null)
-    attack_statistics = _detector_statistics(attack)
+    checks_per_attempt = _checks_per_attempt(block_qubits)
+    fit_statistics = _detector_statistics(fitted_null, checks_per_attempt)
+    null_statistics = _detector_statistics(heldout_null, checks_per_attempt)
+    attack_statistics = _detector_statistics(attack, checks_per_attempt)
     rules = {
         detector: _fit_alarm_rule(values, looks)
         for detector, values in fit_statistics.items()

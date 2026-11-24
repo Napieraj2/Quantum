@@ -25,6 +25,8 @@ Open a notebook, edit the first code cell if needed, and choose **Run All**. The
 
 BB84 and QFT start with the Erven reference noise rates. The BB84 notebook offers a broader sweep in its first cell. The QFT notebook starts with two Eves using different basis biases and compares pooled errors, the joint check-pattern score, and prepared-state check errors on the same trials. It uses the published two-pass circuit and the proposal's repeated four-bit secret. The saved proposal grid covers the pooled and joint scores. [Proposal deliverable status](validation/MODEL_NOTES.md#proposal-deliverables) · [Script and result inventory](validation/SCRIPT_REVIEW.md) · [Information bounds](validation/MODEL_NOTES.md#first-bounds-on-eves-information)
 
+The block-size comparison covers 1, 2, 4, 8, and 16 qubits per block. All five settings carry the same four-bit secret. The 16-qubit block uses twelve hidden checks per attempt, compared with four checks at the other sizes. [Comparison plot](results/qft_block_sizes/comparison.png) · [Counts and settings](results/qft_block_sizes/comparison.csv)
+
 ## QFT alarm-response results
 
 The X-only sweep tested 300 attack settings with 1,024 trials each and a 100-attempt cap. **Reject on alarm** discards the key as soon as Bob alarms. **Reset on early alarm** lets Bob dismiss an alarm before the final attempt, clear his accumulated evidence, and keep testing the same key. Both policies reject the key if Bob alarms on the final attempt or his key differs from Alice's. Bob makes alarm decisions at attempts 25, 50, and 100 on the fixed schedule. The random schedule chooses 2–4 attempts for those decisions, always including attempt 100. [Full sweep data](results/qft_alarm_policy_sweep.csv)

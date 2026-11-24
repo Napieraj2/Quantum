@@ -19,7 +19,7 @@ Open a notebook, edit the first code cell if needed, and choose **Run All**. The
 | --- | --- |
 | [BB84](BB84.ipynb) | Detection with one final alarm decision or several scheduled decisions, for QBER, U2, and U4. Zero interception gives the held-out false-alarm rate. |
 | [QFT repeated secret](QFT_Repeated_Secret.ipynb) | False alarms, Eve's recovery, and what happens when Bob dismisses an alarm or changes when he checks. |
-| [Gate baseline](Gate_Baseline.ipynb) | Wrong-outcome rates for each X/H round trip and its same-state control. The default runs locally in Aer. |
+| [Gate baseline](Gate_Baseline.ipynb) | X/H round-trip error rates and whole-word and per-bit errors for the 2- and 4-qubit inverse QFT. The default runs locally in Aer. |
 
 ## Study scope
 
@@ -28,6 +28,8 @@ BB84 and QFT start with the Erven reference noise rates. The BB84 notebook offer
 The block-size comparison covers 1, 2, 4, 8, and 16 qubits per block. All five settings carry the same four-bit secret. The 16-qubit block uses twelve hidden checks per attempt, compared with four checks at the other sizes. [Comparison plot](results/qft_block_sizes/comparison.png) · [Counts and settings](results/qft_block_sizes/comparison.csv)
 
 To include hardware measurements in the repeated-secret simulation, run the gate baseline with `RUN_MODE = "hardware"`, then set `USE_HARDWARE_BASELINE = True` in the repeated-secret notebook. It reads `results/gate_baseline_hardware.json` to model Bob's measurement errors and recalibrate his alarms. For a local test, run the gate baseline in Aer and point `GATE_BASELINE_FILE` at `results/gate_baseline_aer.json`. [Gate baseline](Gate_Baseline.ipynb) · [Repeated-secret notebook](QFT_Repeated_Secret.ipynb)
+
+The gate notebook also decodes every known word at the sizes in `QFT_DECODER_WIDTHS`. It shows a computational-basis control and the inverse QFT side by side. The separate `results/qft_decoder_hardware.json` or `results/qft_decoder_aer.json` export preserves the observed words, error rates, and compiled two-qubit operations for each size. [Decoder benchmark](Gate_Baseline.ipynb#bobs-inverse-qft-on-known-words)
 
 ## QFT alarm-response results
 

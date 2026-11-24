@@ -108,7 +108,7 @@ For the two-qubit run, the holdout false-alarm counts were 215, 219, and 243 out
 
 The gate baseline exports wrong outcomes and shot counts for the prepared `|0⟩` and `|1⟩` same-state controls measured in Z. The QFT switch uses their fractions as effective assignment probabilities `P(1|0)` and `P(0|1)`. The measurements include state preparation. The model applies rates from one physical qubit independently to each decoded bit at Bob. His check scores and final key agreement both use the reported bits. Alarm fitting and held-out false-alarm trials use the same assignment model. The existing per-leg Pauli rates still describe the link.
 
-The X–X and H–H round-trip bars benchmark single-qubit circuits. Characterizing the multi-qubit QFT gates would require data from representative transpiled QFT circuits at the chosen block size. [Gate baseline](../Gate_Baseline.ipynb) · [QFT settings](../QFT_Repeated_Secret.ipynb)
+The X–X and H–H round-trip bars benchmark single-qubit circuits. A separate decoder test prepares each possible 2- and 4-qubit Fourier word with single-qubit gates and runs the inverse QFT. Its controls prepare and read the corresponding computational words. The exported counts show how gate execution and readout together affect whole words and individual bits. Local Aer uses synthetic X/H and readout noise. Hardware runs use the compiled circuits on the selected physical layout. [Gate baseline](../Gate_Baseline.ipynb) · [QFT settings](../QFT_Repeated_Secret.ipynb)
 
 ## QFT block-size comparison
 

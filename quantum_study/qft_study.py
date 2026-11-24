@@ -15,9 +15,10 @@ from .qft_exchange import (
 
 
 # Proposal §2 (Napieraj and Chuang, 2026) sets the 5% false-alarm target.
-# The two QFT scores and the reproducible seed are project settings.
+# The QFT score names and the reproducible seed are project settings.
 # See validation/MODEL_NOTES.md for the source map.
 DETECTORS = ("Pooled check errors", "Joint-check surprisal")
+PREPARED_STATE_DETECTOR = "Prepared-state check errors"
 TARGET_FALSE_ALARM = 0.05
 DEFAULT_SEED = 20261122
 
@@ -92,7 +93,10 @@ def _detector_statistics(paths):
     errors, joint = _check_totals(paths)
     checks = CHECKS_PER_ATTEMPT * np.arange(1, errors.shape[1] + 1)
     pooled = errors / checks
-    return dict(zip(DETECTORS, (pooled, joint)))
+    scores = dict(zip(DETECTORS, (pooled, joint)))
+    if "prepared_state_score" in paths:
+        scores[PREPARED_STATE_DETECTOR] = paths["prepared_state_score"].cumsum(axis=1)
+    return scores
 
 
 # Proposal §2 reports guesses at 99% confidence. The study records the first
@@ -232,14 +236,17 @@ def run_qft_study(
     q_z=0.002,
     q_x=0.038,
     seed=DEFAULT_SEED,
+    *,
+    compare_prepared_state=False,
 ):
-    """Run paired pooled-error and joint-surprisal QFT detectors.
+    """Compare QFT detectors on shared trials.
 
     ``trials`` independent paths are used for each of three domains: fitting
     stationary-null alarm rules, measuring held-out false alarms, and the
     configured multi-Eve attack. Detector comparisons share every physical
     attack path. Looks occur at 25%, 50%, and 100% of the attempt cap; this is
     separate from the proposal's 20/50/100 retained-check factorial.
+    Set ``compare_prepared_state`` to include the weighted marginal check errors.
     """
     _validate_study(attempts, trials, block_qubits, intercept_probability)
     eve_z_probabilities = _eve_biases(eve_z_probabilities)
@@ -257,6 +264,7 @@ def run_qft_study(
         q_z=q_z,
         q_x=q_x,
         attempts=attempts,
+        include_prepared_state=compare_prepared_state,
     )
     fitted_null = simulate_paths(np.random.default_rng(fit_root), include_posterior=False, **common)
     heldout_null = simulate_paths(np.random.default_rng(null_root), include_posterior=False, **common)
@@ -281,19 +289,19 @@ def run_qft_study(
         detector: _first_alarms(
             null_statistics[detector], rules[detector], null_draws
         )
-        for detector in DETECTORS
+        for detector in rules
     }
     attack_alarms = {
         detector: _first_alarms(
             attack_statistics[detector], rules[detector], attack_draws
         )
-        for detector in DETECTORS
+        for detector in rules
     }
     declaration_attempt, declaration_guess = _declarations(attack, attempts)
 
     # Package proposal §3 outcomes and project acceptance metrics for the notebook.
     summaries, curves = [], []
-    for detector in DETECTORS:
+    for detector in rules:
         summary, alarm_first, correct, declaration_first = _study_rows(
             attack, detector, attack_alarms[detector], false_alarms[detector],
             declaration_attempt, declaration_guess, attempts, block_qubits,

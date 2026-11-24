@@ -23,7 +23,7 @@ Open a notebook, edit the first code cell if needed, and choose **Run All**. The
 
 ## Study scope
 
-BB84 and QFT start with the Erven reference noise rates. The BB84 notebook offers a broader sweep in its first cell. The QFT notebook starts with two Eves using different basis biases and compares pooled check errors with the block check-pattern score. It uses the published two-pass circuit and the proposal's repeated four-bit secret. [Methods and deliverable map](validation/MODEL_NOTES.md#proposal-deliverables)
+BB84 and QFT start with the Erven reference noise rates. The BB84 notebook offers a broader sweep in its first cell. The QFT notebook starts with two Eves using different basis biases and compares pooled errors, the joint check-pattern score, and prepared-state check errors on the same trials. It uses the published two-pass circuit and the proposal's repeated four-bit secret. The saved proposal grid covers the pooled and joint scores. [Proposal deliverable status](validation/MODEL_NOTES.md#proposal-deliverables) · [Script and result inventory](validation/SCRIPT_REVIEW.md) · [Information bounds](validation/MODEL_NOTES.md#first-bounds-on-eves-information)
 
 ## QFT alarm-response results
 

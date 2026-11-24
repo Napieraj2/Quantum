@@ -1,15 +1,18 @@
 import unittest
 
 import numpy as np
+from pandas.testing import assert_frame_equal
 
 from quantum_study.qft_alarm import _look_schedules, _replay_alarms
 from quantum_study.qft_exchange import (
     _null_decoding_probabilities,
     _payload_likelihoods,
+    _prepared_state_score,
     _rotations,
     simulate_paths,
 )
 from quantum_study.qft_study import (
+    PREPARED_STATE_DETECTOR,
     _curve_rows,
     _declarations,
     _study_rows,
@@ -99,7 +102,7 @@ class QFTStudyTests(unittest.TestCase):
                 atol=1e-14,
             )
 
-    def test_joint_check_probability_matches_full_density_fixture(self):
+    def test_check_scores_match_full_density_fixture(self):
         q_z, q_x = 0.002, 0.038
         for qubits in (2, 4):
             phases = np.linspace(0.17, 2.41, qubits)
@@ -121,6 +124,39 @@ class QFTStudyTests(unittest.TestCase):
             np.testing.assert_allclose(
                 candidate, _CHECK_DISTRIBUTIONS[qubits], rtol=0, atol=1e-14
             )
+
+            # Compare the weighted score of observing all zeros against the
+            # mismatch marginals of the independent full-density fixture.
+            values = np.array([1] if qubits == 2 else [1, 0])
+            bits = (words[:, None] >> (qubits - 1 - np.array(checks))) & 1
+            joint = _CHECK_DISTRIBUTIONS[qubits]
+            rates = np.array(
+                [joint[0]] if qubits == 2 else [joint[:2].sum(), joint[1::2].sum()]
+            )
+            expected = ((values - rates) * (1 - 2 * rates) / (rates * (1 - rates))).sum()
+            score = _prepared_state_score(
+                probabilities[None, None], bits[None, None], values[None, None],
+                values[None, None].astype(bool),
+            )
+            np.testing.assert_allclose(score, [expected], atol=1e-12, rtol=0)
+
+    def test_prepared_state_handles_checks_with_a_certain_noise_only_result(self):
+        null = np.array([[[1., 0.]], [[1., 0.]]])
+        candidate_checks = np.array([[[[0], [1]]], [[[0], [1]]]])
+        expected = np.zeros((2, 1, 1), dtype=int)
+        mismatches = np.array([[[False]], [[True]]])
+        np.testing.assert_array_equal(
+            _prepared_state_score(null, candidate_checks, expected, mismatches),
+            [0., np.inf],
+        )
+
+    def test_prepared_state_comparison_preserves_shared_detector_results(self):
+        settings = dict(attempts=12, trials=32, intercept_probability=0.2)
+        summary, curves = run_qft_study(**settings)
+        extended_summary, extended_curves = run_qft_study(**settings, compare_prepared_state=True)
+        for baseline, extended in ((summary, extended_summary), (curves, extended_curves)):
+            self.assertEqual(extended.detector.unique()[-1], PREPARED_STATE_DETECTOR)
+            assert_frame_equal(baseline, extended.iloc[:len(baseline)], check_exact=True)
 
     def test_same_attempt_alarm_wins_and_freezes_prior_posterior(self):
         attempts = 4

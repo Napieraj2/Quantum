@@ -91,6 +91,22 @@ def _null_decoding_probabilities(phases, candidates, rotations, q_z, q_x):
     return probabilities.mean(axis=-2)
 
 
+# Adapt the weighted error score in proposal §2 to QFT's prepared phases and
+# announced checks. Use the marginal error probability for each retained bit.
+def _prepared_state_score(null, candidate_checks, values, mismatches):
+    possible_errors = candidate_checks != values[..., None, :]
+    rates = (null[..., None] * possible_errors).sum(axis=-2).clip(0.0, 1.0)
+    variable = (rates > 1 - _NEAR_ONE) & (rates < _NEAR_ONE)
+    weights = np.divide(
+        1 - 2 * rates, rates * (1 - rates),
+        out=np.zeros_like(rates), where=variable,
+    )
+    score = ((mismatches - rates) * weights).sum(axis=(1, 2))
+    impossible = ~variable & (mismatches != (rates >= 0.5))
+    score[impossible.any(axis=(1, 2))] = np.inf
+    return score
+
+
 # Project derivation for proposal §2's pooled Eve records. The full-density
 # reference values are checked in validation/test_qft_study.py.
 def _payload_likelihoods(encodings, last_forward, first_return, q_x):
@@ -129,6 +145,7 @@ def _eve_biases(probabilities):
 def simulate_paths(
     rng, *, trials, qubits, q_z, q_x, attempts,
     intercept_probability=0.0, eve_z_probabilities=(), include_posterior=True,
+    include_prepared_state=False,
 ):
     """Sample exchanges through the cap, with interception ending at Eve's declaration.
 
@@ -157,6 +174,8 @@ def simulate_paths(
         posterior = np.empty((trials, attempts, 16))
     errors = np.empty((trials, attempts), dtype=int)
     scores = np.empty((trials, attempts))
+    if include_prepared_state:
+        prepared_state_scores = np.empty_like(scores)
     signal_shape = (trials, blocks, qubits)
 
     for attempt in range(attempts):
@@ -197,7 +216,8 @@ def simulate_paths(
         outcomes = (rng.random((trials, blocks, 1)) > cumulative).sum(axis=-1)
         decoded_blocks = block_bits[outcomes]
         observed = np.take_along_axis(decoded_blocks, checks, axis=-1)
-        errors[:, attempt] = (observed != values).sum(axis=(1, 2))
+        mismatches = observed != values
+        errors[:, attempt] = mismatches.sum(axis=(1, 2))
 
         # Proposal §2 uses joint check-pattern likelihoods. The notebook adds
         # their negative logs across blocks as Bob's score.
@@ -207,6 +227,10 @@ def simulate_paths(
         likelihood = (null * same_pattern).sum(axis=-1)
         likelihood[likelihood >= _NEAR_ONE] = 1.0
         scores[:, attempt] = -np.log(np.maximum(likelihood, _TINY)).sum(axis=-1)
+        if include_prepared_state:
+            prepared_state_scores[:, attempt] = _prepared_state_score(
+                null, candidate_checks, values, mismatches,
+            )
 
         # Proposal §2 updates Eve's probabilities over the 16 secrets. The
         # project stops Eve's interception after she makes a guess.
@@ -238,6 +262,8 @@ def simulate_paths(
         "joint_score": scores,
         "final_key_agrees": final_key_agrees,
     }
+    if include_prepared_state:
+        paths["prepared_state_score"] = prepared_state_scores
     if include_posterior:
         paths["posterior"] = posterior
         paths["bit_posterior"] = posterior @ secret_bits

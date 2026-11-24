@@ -9,13 +9,13 @@ The proposal specifies the noise model, detector calibration, and recovery crite
 | [quantum_study/__init__.py](../quantum_study/__init__.py) | Package marker for notebook and test imports. | Kept the minimal initializer. Callers load their own submodules. |
 | [bb84.py](../quantum_study/bb84.py) | NumPy, SciPy, pandas, and Matplotlib. Drives `BB84.ipynb` using the proposal's sifted-check model. | Builds each scenario grid once and reuses decision counts per budget. The plot legend displays the configured false-alarm target. |
 | [qft_exchange.py](../quantum_study/qft_exchange.py) | NumPy and SciPy. Supplies physical paths to `qft_study.py` and `qft_alarm.py`. | Shared input checks cover block size, attempts, trials, interception and basis probabilities. Removes the unused zero-attempt branch. The focused model draws independent bases on interception and uses a common interception probability. |
-| [qft_study.py](../quantum_study/qft_study.py) | Active exchange, NumPy and pandas. Runs the focused notebook and supplies alarm helpers to the follow-up. | Transmission and check costs now run until Bob's alarm or the cap. Eve's declaration still determines the first-outcome result and stops her interception. The decision schedule uses percentages of the attempt cap. |
-| [qft_alarm.py](../quantum_study/qft_alarm.py) | Active exchange and alarm helpers. Drives the alarm-response section of the QFT notebook. | Documents the follow-up's random count and spacing, first-crossing target, and the meaning of acceptance after reset. The policy outcomes are unchanged. |
+| [qft_study.py](../quantum_study/qft_study.py) | Active exchange, NumPy and pandas. Runs the focused notebook and supplies alarm helpers to the follow-up. | Counts transmissions and checks until Bob alarms or reaches the cap. Compares Bob's alarm with Eve's first guess. Eve stops intercepting once she guesses. |
+| [qft_alarm.py](../quantum_study/qft_alarm.py) | Active exchange and alarm helpers. Drives the alarm-response section of the QFT notebook. | Documents the random schedule, the 5% target for any alarm in a noise-only trial, and how Bob accepts keys after a reset. |
 | [independent_bb84_validation.py](independent_bb84_validation.py) | NumPy, Matplotlib and CSV. Standalone transmit–sift control for the ideal intercept–resend calculation. | Rejects non-finite baselines and calculates the total error count once. The control CSV values match the saved results. |
 | [test_bb84_validation.py](test_bb84_validation.py) | Independent BB84 control and NumPy. | Checks states, sifting, reproducibility, and rejection of a non-finite baseline. |
 | [test_qft_study.py](test_qft_study.py) | Active QFT modules and independent circuit and likelihood checks. | Checks the corrected session costs after Eve declares, as well as alarm order, recovery, and final acceptance. |
 
-BB84 tests detector power on sifted bits with pooled, basis-grouped, and state-grouped scores. The QFT recovery experiment compares pooled check errors with a detector that scores each hidden-check pattern. The state-grouped U4 score is evaluated in the BB84 control. The [saved proposal sweep](../results/proposal_setting_results.zip) retains its first-outcome cost convention. The [alarm-policy CSV](../results/qft_alarm_policy_sweep.csv) reports crossing, recovery, and acceptance outcomes. [Model notes](MODEL_NOTES.md#reading-the-results)
+BB84 tests detector power on sifted bits with pooled, basis-grouped, and state-grouped scores. The QFT recovery experiment compares pooled check errors with a detector that scores each hidden-check pattern. The proposal sweep counts costs up to Bob's alarm, Eve's guess, or the budget, whichever comes first. The alarm-policy CSV reports alarms, recovery, and key acceptance. [Saved proposal sweep](../results/proposal_setting_results.zip) · [Alarm-policy CSV](../results/qft_alarm_policy_sweep.csv) · [Model notes](MODEL_NOTES.md#reading-the-results)
 
 ## Ian's independent calculations
 
@@ -48,12 +48,12 @@ This pilot retains its historical sampled-phase inference, shared Eve settings, 
 
 ## Proposal sweep runner
 
-The bundled scripts reproduce the saved proposal sweep using its original inputs, seed order, and first-outcome cost convention. [Proposal results bundle](../results/proposal_setting_results.zip)
+The bundled scripts reproduce the saved proposal sweep using its original inputs and seed order. [Proposal results bundle](../results/proposal_setting_results.zip)
 
 | Script in `qft_runner/` | Dependencies and callers | Review result |
 | --- | --- | --- |
 | `run.py` | NumPy, pandas, the bundled exchange, and the bundled alarm rules. | Defines the original proposal grid and retained-check budgets. Both smoke groups reproduced their previous CSVs. |
-| `qft_proposal_alarm.py` | NumPy and the bundled recovery threshold. | Preserves the alarm and declaration rules from the original sweep revision. |
+| `qft_proposal_alarm.py` | NumPy and the bundled recovery threshold. | Preserves the rules for when Bob alarms and when Eve guesses the key. |
 | `qft_proposal_exchange.py` | NumPy, SciPy, and the bundled basis implementation. Derived from the active exchange and exact phase marginal. | Retains per-check pooled and pattern scores so the 20, 50, and 100 check budgets can fall within an attempt. |
 | `qft_proposal_basis.py` | NumPy. Supplies Eve measurement draws to the bundled exchange. | Retains the proposal's basis-redraw process and its independent-draw special case. |
 
@@ -64,7 +64,7 @@ The default study notebooks and local Bell control were checked on their local e
 | Script or notebook | Dependencies and callers | Review result |
 | --- | --- | --- |
 | [BB84.ipynb](../BB84.ipynb) | Active BB84 study and its plotting functions. | The final-only and scheduled decision figures and the calibration table serve separate parts of the proposal. |
-| [QFT_Repeated_Secret.ipynb](../QFT_Repeated_Secret.ipynb) | Active exchange, focused study, and alarm-policy runner. | First outcomes, final acceptance, per-bit confidence, and the alarm-response comparison use their corresponding study output. |
+| [QFT_Repeated_Secret.ipynb](../QFT_Repeated_Secret.ipynb) | Active exchange, focused study, and alarm-policy runner. | Shows who acts first, which keys Bob accepts, how much Eve learns, and what changes when Bob dismisses alarms. |
 | [Gate_Baseline.ipynb](../Gate_Baseline.ipynb) | Qiskit circuits, local Aer or IBM Runtime, and Matplotlib. | Skips simulator settings when they are inactive and labels a zero-noise run correctly. Control circuits and barriers preserve the comparison of the X/H round trips. |
 | [BB84_Quick_Control.ipynb](../archive/BB84_Quick_Control.ipynb) | NumPy standalone earlier BB84 comparison using a strict cutoff. | Removed unused settings for larger sweeps. Kept the original single-budget demonstration. |
 | [QFT_Factorial_Pilot.ipynb](../archive/qft_pilot/QFT_Factorial_Pilot.ipynb) | Archived result, sweep, validation, and recalibration modules. | The saved dashboard and optional reproduction runs use their original data and interfaces. |

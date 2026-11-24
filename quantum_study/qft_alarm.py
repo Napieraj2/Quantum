@@ -1,8 +1,8 @@
 """Compare out-of-proposal alarm schedules and responses for X-only Eves.
 
-The random policy varies both look count and timing. The false-alarm target
-applies to the first crossing. Final rejection under reset is an observed
-consequence of Bob's response.
+The random schedule varies when and how often Bob can alarm. The false-alarm
+target is for at least one alarm in a noise-only trial. The reset policy can
+dismiss alarms before the final attempt.
 """
 
 import numpy as np
@@ -43,7 +43,7 @@ def _fit_schedule(totals, looks):
 
 
 def _replay_alarms(totals, looks, rule, ties):
-    """Return the first crossing, any interim reset, and the post-reset final alarm."""
+    """Return when Bob first alarms, whether he resets, and whether he alarms at the end."""
     trials, attempts = totals.shape
     centers, scales, cutoff, tie_probability = rule
     rows = np.arange(trials)
@@ -75,10 +75,10 @@ def run_qft_alarm_comparison(
     coalition_sizes=(1, 2, 4, 8, 16), random_look_range=(2, 4),
     q_z=0.002, q_x=0.038, seed=DEFAULT_SEED,
 ):
-    """Compare first crossings and final key acceptance for X-only coalitions.
+    """Compare alarms and final key acceptance for X-only coalitions.
 
-    ``exposed_after_reset`` counts exposed acceptances in sessions with an
-    interim reset. Eve may have recovered the key before or after that reset.
+    ``exposed_after_reset`` counts exposed keys that Bob accepted in trials
+    where he reset. Eve may have recovered the key before or after that reset.
     """
     _validate_study(attempts, trials, block_qubits, intercept_probability)
     coalition_sizes = tuple(coalition_sizes)

@@ -20,7 +20,7 @@
 | [BB84.ipynb](../BB84.ipynb) and [bb84.py](../quantum_study/bb84.py) | Week 2. QBER, U2, and U4 compare detection and held-out false alarms on shared trials within each alarm schedule. | Bennett and Brassard provide the preparations, Lo et al. motivate basis grouping, Lee et al. inform the normal approximation, and proposal §2 defines the scores and calibration. [Notebook references](../BB84.ipynb#references) |
 | [QFT_Repeated_Secret.ipynb](../QFT_Repeated_Secret.ipynb) and [qft_study.py](../quantum_study/qft_study.py) | Weeks 3 and 5. The paired recovery experiment, outcomes, and figures. | Proposal §2 supplies the repeated secret, recovery threshold, and independent calibration. The attempt-level alarm schedule and block surprisal are project choices. |
 | [qft_exchange.py](../quantum_study/qft_exchange.py) | Weeks 1 and 3. Circuit, check likelihoods, and Eve's pooled record likelihood. | The two-pass circuit follows [Papadopoulos and Linvill, §4.1, Fig. 2, Eqs. (1)–(3), and §6.1](https://arxiv.org/abs/2404.12507v2). [Erven et al., §4](https://arxiv.org/abs/0901.0960v2) supplies the reference rates. Proposal §2 defines the Pauli model and pooled records. |
-| [qft_alarm.py](../quantum_study/qft_alarm.py) | Follow-up. Replays the active QFT exchanges under fixed and randomized decision schedules and under rejection and reset responses. | The 5% crossing target comes from the proposal. Random schedules, interim resets, and final key acceptance are project extensions. |
+| [qft_alarm.py](../quantum_study/qft_alarm.py) | Follow-up. Compares fixed and random schedules and what Bob does when he alarms. | The 5% false-alarm target comes from the proposal. Random schedules, resets, and final key acceptance are project extensions. |
 | [Gate_Baseline.ipynb](../Gate_Baseline.ipynb) | Week 4 setup. X/H round trips and same-state controls. | The four preparations and measurements follow Bennett and Brassard, pp. 175–177. The control design and synthetic noise rates are project choices. [Gate references](../Gate_Baseline.ipynb#interpretation-and-sources) |
 | [quantum_study/__init__.py](../quantum_study/__init__.py) | Python package setup for the notebook imports. | Python package infrastructure. |
 | [independent_bb84_validation.py](independent_bb84_validation.py) and [test_bb84_validation.py](test_bb84_validation.py) | §3 completed control and Week 2 validation. State probabilities, sifting, and ideal intercept-resend. | [Bennett and Brassard, pp. 175–177](https://arxiv.org/abs/2003.06557) and [Scarani et al., §I.B.5](https://arxiv.org/abs/0802.4155). |
@@ -53,39 +53,38 @@ The [script review](SCRIPT_REVIEW.md) records the dependencies, sources, and aud
 | **Pooled check errors / QBER** | The fraction of retained checks with the wrong value. QBER stands for quantum bit error rate in BB84. |
 | **Joint-check surprisal** | The negative log of the noise-only probability of Bob's observed check pattern within a QFT block. Rarer patterns give larger scores. Bob adds the scores across the blocks in his current evidence window. |
 | **Basis U2 / State U4** | BB84 scores that weight error counts relative to the noise baseline. U2 groups counts by the two bases. U4 uses the four prepared states. |
-| **Alarm look** | A scheduled point when Bob compares his score with the alarm cutoff. In the QFT notebook he collects check results on every attempt, and makes alarm decisions at the scheduled looks. |
 | **Final alarm decision only** | Bob decides whether to alarm once, at the full check budget. The proposal results CSVs label this schedule `terminal`. |
 | **Multiple scheduled alarm decisions** | Bob can alarm at several points. In the proposal runs, each decision uses all checks collected so far. With a 100-check budget, he can alarm at 25, 50, or 100 checks. The proposal results CSVs label this schedule `cumulative`. |
-| **Percentage and random schedules (QFT)** | The percentage schedule makes decisions at 25%, 50%, and 100% of the attempt cap. The default random schedule chooses 2–4 decision points per session and includes the final attempt. |
-| **Calibration and held-out noise** | Calibration uses noise-only trials to set the cutoff. A separate held-out noise-only batch measures the realized crossing rate. The 5% target refers to at least one crossing across the whole schedule. |
-| **Threshold crossing** | Bob's score meets the calibrated alarm rule at a scheduled look. The policy comparison counts a trial as having crossed if this happens at least once, including a crossing Bob later dismisses. |
-| **Attack crossing rate / Bob alarmed first** | The attack crossing rate counts any crossing in an attacked trial. The first-outcome chart counts Bob first when his alarm comes before or on the same attempt as Eve's declaration. |
-| **Reject on alarm** | Bob rejects the candidate key at the first threshold crossing. |
-| **Reset on interim alarm** | Bob treats an interim crossing as noise and clears his accumulated evidence. Later looks score checks collected after the reset using the same noise calibration. Alice continues with the same key and Eve keeps her evidence. A crossing at the final look rejects the key. |
-| **Sessions reset** | The number of trials in which Bob dismissed at least one interim crossing. A trial with several resets counts once. |
-| **Noise session rejection** | The fraction of held-out noise-only trials rejected by Bob's alarm response. A dismissed interim crossing can contribute to the noise crossing rate and still leave the session eligible for acceptance. |
+| **Fixed and random schedules (QFT)** | Bob collects check bits on every attempt. On the fixed schedule he can alarm at 25%, 50%, and 100% of the attempt cap. By default the random schedule chooses 2–4 attempts and always includes the final attempt. |
+| **Calibration and held-out noise** | One set of noise-only trials sets the cutoff. A separate set measures how often Bob alarms. The 5% target is for at least one alarm in a noise-only trial. |
+| **Trials with an alarm** | The share of trials with at least one alarm, including alarms Bob dismisses. **Trials rejected by alarm** counts the share where an alarm caused Bob to reject the key. |
+| **Bob alarmed first** | Bob alarmed before or on the same attempt as Eve's first guess, or he alarmed and Eve never guessed. |
+| **Reject on alarm** | Bob rejects the key as soon as he alarms. |
+| **Reset on early alarm** | Bob dismisses alarms before the final attempt and clears the evidence he has collected so far. Alice keeps sending the same key, and Eve keeps what she learned. An alarm at the final attempt still rejects the key. |
+| **Sessions reset** | The number of trials where Bob dismissed at least one alarm. A trial with several resets counts once. |
 | **Detection power** | In the BB84 results, the fraction of attacked trials that raise an alarm under the stated detector and check schedule. |
 
 ### Recovery and key acceptance
 
 | Term | Definition |
 | --- | --- |
-| **Eve's posterior and declaration** | The posterior gives Eve's probability for each of the 16 possible four-bit keys. She declares the first candidate to reach at least 99% confidence and stops intercepting on subsequent attempts. Her declaration can be correct or incorrect. |
+| **Eve's confidence and guess** | Eve tracks a probability for each of the 16 keys. She guesses when one reaches at least 99% confidence and then stops intercepting. |
 | **Mean probability of true bit** | The average probability Eve assigned to the value Alice actually sent at one bit position. Each line tracks one bit across trials. The plot carries forward each stopped trial's last available confidence. |
-| **Full recovery before alarm** | Eve's first declaration correctly identifies all four bits before Bob's first crossing. Bob wins a same-attempt tie. The recovery curve shows the fraction of attacked trials recovered by each attempt, and the policy table reports the count before the first crossing. |
-| **Reached cap** | In the first-outcome chart, the trial ended at the attempt cap with neither an alarm nor a declaration. Key acceptance is evaluated separately at the final check. |
-| **Accepted session** | Bob reaches the final attempt, passes the alarm policy, and his final decoded key matches Alice's under ideal confirmation. The reset policy can accept a key after an interim crossing has been dismissed. |
-| **Exposed accepted key** | An accepted key that Eve correctly declared by the cap. **Exposed acceptance after reset** is an exposed accepted key from a session where Bob dismissed at least one interim crossing. |
+| **Full recovery before alarm** | Eve guessed all four bits correctly before Bob's first alarm, or she guessed correctly and Bob never alarmed. An alarm on the same attempt as her guess counts for Bob. |
+| **Reached attempt cap** | The trial reached the last attempt without an alarm or a guess from Eve. Bob can still accept the key if it matches Alice's. |
+| **Accepted session** | Bob reaches the final attempt, has no alarm that requires him to reject the key, and his final decoded key matches Alice's. |
+| **Exposed accepted key** | Bob accepted the key and Eve guessed it correctly by the final attempt. The reset column counts these keys in trials where Bob dismissed at least one alarm. |
 | **Exposure among accepted keys** | Exposed accepted keys divided by accepted sessions. This fraction is undefined when no key is accepted. Dividing by all attacked trials gives the overall frequency of exposed acceptance. |
 
 For example, 8 exposed keys among 8 acceptances out of 1,024 attacked trials gives **100% exposure among accepted keys** and **0.78% exposed acceptance across all attacked trials**.
 
+The saved sweep uses `noise_crossing_rate` and `attack_crossing_rate` for the shares of trials with an alarm. `recovered_before_first_crossing` counts trials where Eve recovered before Bob's alarm. [Alarm sweep CSV](../results/qft_alarm_policy_sweep.csv)
+
 ## Reading the results
 
 - **BB84.** With uniform Eve bases, sifted attack-only QBER is `f/4`. The project combines background bit flips and attack errors as `q + (1 - 2q) × attack_error`. Equal true rates within each basis make true-rate U2 and U4 coincide. The curves show realized false alarms at zero interception. Wilson intervals describe Monte Carlo uncertainty. The sharp Bernoulli bounds in [Mannalath et al.](https://arxiv.org/abs/2410.04095) remain outside these runs.
-- **QFT.** Each attempt yields four fresh checks. In the focused comparison, Bob looks after 25%, 50%, and 100% of the configured attempt cap. Each detector targets a 5% chance of any alarm across those looks, and the figure shows its independent held-out rate. The joint detector scores the disclosed check pattern within each block. Recovery before alarm counts a correct declaration at 99% posterior confidence or higher that occurs before Bob's alarm. The exact Eve likelihood starts from the uniform phase mixture and uses the measurement records from both legs. The first three notebook sections use one noise and attack setting.
-- **Accepted-key exposure.** In the focused reject-on-alarm comparison, Bob accepts if all alarm looks pass and his final decoded four-bit key matches Alice's under ideal confirmation. A key is exposed if Eve's first 99%-confidence declaration was correct by then. Eve stops intercepting after her first declaration. Bob checks until he alarms or reaches the attempt cap. The table gives the fraction exposed among accepted attacked sessions. The fraction is undefined when no session accepts a key.
-- **QFT cost counts.** The focused study's `mean_checks` and `mean_transmitted_qubits` measure Bob's session through his alarm or the cap. The saved [proposal sweep](../results/proposal_setting_results.zip) measures `mean_retained_checks` and `mean_transmitted_qubits` to the first outcome or check budget, including an earlier Eve declaration. Each qubit sent on either leg counts as one transmission.
+- **QFT.** The first three notebook sections use one noise and attack setting with a fixed schedule. The left panel measures false alarms on separate noise-only trials. The joint detector scores the disclosed check pattern within each block. Eve's probabilities account for Bob's unknown phases and use measurement records from both legs.
+- **QFT cost counts.** The notebook measures `mean_checks` and `mean_transmitted_qubits` until Bob alarms or reaches the cap. In the saved proposal sweep, `mean_retained_checks` and `mean_transmitted_qubits` count up to Bob's alarm, Eve's guess, or the check budget, whichever comes first. Each qubit sent on either leg counts as one transmission. [Proposal sweep](../results/proposal_setting_results.zip)
 
 ## QFT research direction
 

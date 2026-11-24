@@ -18,7 +18,7 @@ Open a notebook, edit the first code cell if needed, and choose **Run All**. The
 | Notebook | Figures you get |
 | --- | --- |
 | [BB84](BB84.ipynb) | Detection with one final alarm decision or several scheduled decisions, for QBER, U2, and U4. Zero interception gives the held-out false-alarm rate. |
-| [QFT repeated secret](QFT_Repeated_Secret.ipynb) | False alarms, recovery, and bit confidence, plus an X-only coalition comparison of fixed and random alarm looks and Bob's response to interim alarms. |
+| [QFT repeated secret](QFT_Repeated_Secret.ipynb) | False alarms, Eve's recovery, and what happens when Bob dismisses an alarm or changes when he checks. |
 | [Gate baseline](Gate_Baseline.ipynb) | Wrong-outcome rates for each X/H round trip and its same-state control. The default runs locally in Aer. |
 
 ## Study scope
@@ -27,30 +27,30 @@ BB84 and QFT start with the Erven reference noise rates. The BB84 notebook offer
 
 ## QFT alarm-response results
 
-The X-only sweep tested 300 attack settings with 1,024 trials each and a 100-attempt cap. Bob either rejected the key at his first threshold crossing or treated interim crossings as noise, cleared his evidence, and kept the same key. In both cases a final crossing or key mismatch rejected the key. The fixed schedule makes decisions at attempts 25, 50, and 100. The random schedule draws 2–4 decision points per trial, including attempt 100. [Full sweep data](results/qft_alarm_policy_sweep.csv)
+The X-only sweep tested 300 attack settings with 1,024 trials each and a 100-attempt cap. **Reject on alarm** discards the key as soon as Bob alarms. **Reset on early alarm** lets Bob dismiss an alarm before the final attempt, clear his accumulated evidence, and keep testing the same key. Both policies reject the key if Bob alarms on the final attempt or his key differs from Alice's. Bob makes alarm decisions at attempts 25, 50, and 100 on the fixed schedule. The random schedule chooses 2–4 attempts for those decisions, always including attempt 100. [Full sweep data](results/qft_alarm_policy_sweep.csv)
 
-| Alarm decisions | Detector | Bob's response | Noise-only trials rejected by alarm | Attacked trials with exposed acceptance | Exposed keys / accepted sessions |
+| Schedule | Detector | Bob's response | Noise-only trials rejected by alarm | Exposed keys / all attacked trials | Exposed keys / accepted sessions |
 | --- | --- | --- | ---: | ---: | ---: |
 | Fixed | Pooled check errors | Reject on alarm | 4.95% | 0.37% | 1,134 / 96,134 |
-| Fixed | Pooled check errors | Reset after an interim alarm | 1.07% | 6.11% | 18,766 / 137,849 |
+| Fixed | Pooled check errors | Reset on early alarm | 1.07% | 6.11% | 18,766 / 137,849 |
 | Fixed | Joint-check surprisal | Reject on alarm | 5.02% | 0.37% | 1,142 / 95,448 |
-| Fixed | Joint-check surprisal | Reset after an interim alarm | 1.08% | 6.11% | 18,770 / 137,137 |
+| Fixed | Joint-check surprisal | Reset on early alarm | 1.08% | 6.11% | 18,770 / 137,137 |
 | Random | Pooled check errors | Reject on alarm | 4.99% | 0.54% | 1,668 / 95,649 |
-| Random | Pooled check errors | Reset after an interim alarm | 0.92% | 6.57% | 20,185 / 153,024 |
+| Random | Pooled check errors | Reset on early alarm | 0.92% | 6.57% | 20,185 / 153,024 |
 | Random | Joint-check surprisal | Reject on alarm | 4.97% | 0.56% | 1,714 / 95,216 |
-| Random | Joint-check surprisal | Reset after an interim alarm | 0.96% | 6.57% | 20,190 / 152,528 |
+| Random | Joint-check surprisal | Reset on early alarm | 0.96% | 6.57% | 20,190 / 152,528 |
 
-Each row uses 20,480 held-out noise-only trials and 307,200 attacked trials. Both responses use the same trials. Dismissing interim alarms reduces rejections due to noise and lets more exposed keys pass the final decision.
+Each row uses 20,480 noise-only trials and 307,200 attacked trials. Both policies use the same trials. The table counts a key as exposed when Bob accepts it and Eve has recovered it. Dismissing early alarms reduces rejections due to noise and increases how often Bob accepts an exposed key.
 
-### When do Bob and Eve reach their first outcome?
+### When does Bob alarm or Eve recover?
 
 ![Share of attacked trials where Bob alarms first or Eve recovers first, by attempt. Bob can alarm at attempts 25, 50, and 100.](results/qft_alarm_recovery_timing.png)
 
-This setting uses two-qubit blocks, Erven reference noise, and 16 X-only Eves intercepting 2.5% of qubits per Eve per leg. Bob uses pooled check errors and rejects on alarm. Each line counts trials where that outcome occurred first by the indicated attempt. Bob wins a same-attempt tie. In **159 of the 182 trials where Eve recovered first**, she did so before Bob's first scheduled decision.
+This setting uses two-qubit blocks, Erven reference noise, and 16 X-only Eves intercepting 2.5% of qubits per Eve per leg. Bob uses pooled check errors and rejects on alarm. Each line follows the share of trials where Bob alarmed first or Eve recovered first by that attempt. An alarm on the same attempt as Eve's guess counts for Bob. In **159 of the 182 trials where Eve recovered first**, she did so before Bob's first chance to alarm.
 
 ### How does coalition size affect recovery?
 
-![Recovery before Bob's first threshold crossing by X-only coalition size and per-Eve interception rate, with fixed and random decision schedules.](results/qft_coalition_recovery.png)
+![Recovery before Bob's first alarm by number of Eves and interception rate, with fixed and random schedules.](results/qft_coalition_recovery.png)
 
 Each point combines 20,480 attacked trials across both block sizes and all ten noise profiles, using pooled check errors. As the number of Eves increases, so does the chance at least one Eve intercepts a given qubit on a leg.
 
@@ -62,7 +62,7 @@ The sweep uses the ten distinct noise pairs in §2 of the proposal. These includ
 
 The run covers **1,080 attack settings and 20 noise-only controls** across two- and four-qubit blocks. A coalition has 1, 2, or 4 Eves sharing a configured intercept probability of 0.5%, 1%, or 2.5%, a Z-basis probability of 0.1, 0.5, or 0.9, and a per-signal basis redraw probability of 0.1 or 1. Each Eve samples her own interception events. Each attack setting uses 256 trials, and each control uses 1,024 held-out trials.
 
-QFT uses known channel rates for the likelihoods and fits each alarm rule on 1,000 or 10,000 noise-only paths. Bob makes one alarm decision at the full retained-check budget or up to three at 25%, 50%, and 100% of that budget, rounded up to a whole check. At each decision he uses all checks collected so far. The 100-attempt study makes decisions at attempts 25, 50, and 100, with four retained checks per attempt. Eve updates her posterior after each complete attempt, and Bob wins a same-attempt tie. Columns give **pooled check errors / joint-check surprisal**.
+QFT uses known channel rates for the likelihoods and fits each alarm rule on 1,000 or 10,000 noise-only trials. Bob makes one alarm decision at the full retained-check budget or up to three at 25%, 50%, and 100% of that budget, rounded up to a whole check. At each decision he uses all checks collected so far. The 100-attempt study makes decisions at attempts 25, 50, and 100, with four retained checks per attempt. Eve updates her confidence in each possible key after every complete attempt. An alarm on the same attempt as her guess counts for Bob. Columns give **pooled check errors / joint-check surprisal**.
 
 | Budget | Bob can alarm after | Fit paths | Noise-only alarms | Bob alarmed first | Eve recovered first |
 | --- | --- | ---: | ---: | ---: | ---: |
@@ -83,7 +83,7 @@ QFT uses known channel rates for the likelihoods and fits each alarm rule on 1,0
 
 At 100 attempts, each detector recorded **15 recoveries before alarm in 276,480 attacked trials** for each calibration size. All recoveries occurred with four Eves intercepting at 2.5% each. The highest observed setting was **4/256 (1.56%)** with two-qubit blocks, a Z-basis probability of 0.1, a redraw probability of 1, and noise rates `(0.038, 0.002)`.
 
-With 10,000 fit paths, **7 of 102,038** keys accepted by the pooled detector and **7 of 99,549** keys accepted by the joint detector were exposed. These counts require Bob to pass the final check and confirm agreement with Alice. Each detector was evaluated on the same attack paths.
+With 10,000 fit paths, Eve recovered **7 of the 102,038** keys Bob accepted with the pooled detector and **7 of the 99,549** keys he accepted with the joint detector. Bob accepted only if he never alarmed and his final key matched Alice's. Both detectors used the same attack trials.
 
 ### BB84 detector comparison
 

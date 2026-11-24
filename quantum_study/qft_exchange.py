@@ -15,25 +15,33 @@ import numpy as np
 from scipy.special import logsumexp
 
 
+# Proposal §2 (Napieraj and Chuang, 2026) uses a four-bit secret, half-block
+# checks, and 99% confidence for a guess. See validation/MODEL_NOTES.md.
 CHECKS_PER_ATTEMPT = 4
 RECOVERY_CONFIDENCE = 0.99
+# Numerical safeguards for probabilities in the project implementation below.
 _TINY = np.finfo(float).tiny
 _NEAR_ONE = 1 - 16 * np.finfo(float).eps
-# Codes 0/1 are Z outcomes, 2/3 are X outcomes, and -1 means no record.
+# Proposal §2 specifies X/Z measurements. Here 0/1 are Z outcomes, 2/3 are X
+# outcomes, and -1 means no record.
 _EIGENSTATES = np.array([[1, 0], [0, 1], [1, 1], [1, -1]], dtype=complex)
 _EIGENSTATES[2:] /= np.sqrt(2)
 
 
+# Project bit ordering for the integer block word in Papadopoulos and Linvill, §4.1.
 def _bits(width):
     return (np.arange(2**width)[:, None] >> np.arange(width - 1, -1, -1)) & 1
 
 
+# Alice's local phase rotations follow Papadopoulos and Linvill, §4.1, Eq. (2).
 def _rotations(qubits):
     dimension = 2**qubits
     weights = 2 ** np.arange(qubits - 1, -1, -1)
     return np.exp(2j * np.pi * np.outer(np.arange(dimension), weights) / dimension)
 
 
+# Proposal §2 puts Pauli X, Z, or identity before Eve on each leg. Erven et al.
+# (2009, §4) report the reference rates used by callers.
 def _sample_paulis(states, rng, q_z, q_x):
     draws = rng.random(states.shape[:-1])
     flip = draws < q_z
@@ -42,6 +50,8 @@ def _sample_paulis(states, rng, q_z, q_x):
     states[phase_flip, 1] *= -1
 
 
+# Proposal §2 specifies independent hits by sequential X/Z intercept-resend
+# devices. The record selection supports the likelihood reduction below.
 def _intercept_leg(states, rng, rate, eve_z_probabilities, keep_first):
     """Sample every Eve, retaining the first or last record on each signal."""
     records = np.full(states.shape[:-1], -1, dtype=np.int8)
@@ -63,6 +73,8 @@ def _intercept_leg(states, rng, rate, eve_z_probabilities, keep_first):
     return records
 
 
+# Project density-matrix calculation using the proposal §2 Pauli channel and
+# the decoder from Papadopoulos and Linvill, §4.1, Eq. (3).
 def _null_decoding_probabilities(phases, candidates, rotations, q_z, q_x):
     """Average Bob's null outcome probabilities over unknown payload values."""
     # A local Pauli channel leaves equatorial states with diagonals (1/2, 1/2).
@@ -79,6 +91,8 @@ def _null_decoding_probabilities(phases, candidates, rotations, q_z, q_x):
     return probabilities.mean(axis=-2)
 
 
+# Project derivation for proposal §2's pooled Eve records. The full-density
+# reference values are checked in validation/test_qft_study.py.
 def _payload_likelihoods(encodings, last_forward, first_return, q_x):
     """Exact likelihoods up to a factor common to all candidate messages."""
     # Uniform phases give I/2 per signal. Without a forward record the signal
@@ -91,6 +105,7 @@ def _payload_likelihoods(encodings, last_forward, first_return, q_x):
     return np.where(informative[..., None, :], paired, 1).prod(axis=-1)
 
 
+# Project input checks for proposal §2's 2- and 4-qubit blocks and per-leg interception.
 def _validate_path_settings(trials, attempts, qubits, intercept_probability):
     if type(trials) is not int or trials < 1:
         raise ValueError("trials must be a positive integer")
@@ -102,6 +117,7 @@ def _validate_path_settings(trials, attempts, qubits, intercept_probability):
         raise ValueError("intercept_probability must be between zero and one")
 
 
+# Project input checks for the Z-basis probabilities defined in proposal §2.
 def _eve_biases(probabilities):
     biases = tuple(probabilities)
     if any(not 0 <= probability <= 1 for probability in biases):
@@ -109,6 +125,7 @@ def _eve_biases(probabilities):
     return biases
 
 
+# Combine Papadopoulos and Linvill's §4.1 circuit with proposal §2's repeated-secret model.
 def simulate_paths(
     rng, *, trials, qubits, q_z, q_x, attempts,
     intercept_probability=0.0, eve_z_probabilities=(), include_posterior=True,
@@ -123,6 +140,7 @@ def simulate_paths(
         raise ValueError("q_z and q_x must be nonnegative and sum to at most one")
     eve_z_probabilities = _eve_biases(eve_z_probabilities)
 
+    # Proposal §2 uses the same secret in each attempt and fresh checks in each block.
     width = qubits // 2
     blocks = 4 // width
     rotations = _rotations(qubits)
@@ -142,7 +160,8 @@ def simulate_paths(
     signal_shape = (trials, blocks, qubits)
 
     for attempt in range(attempts):
-        # Select half of each block as fresh checks. Payload order is public.
+        # Hide the check positions until after measurement as in Papadopoulos
+        # and Linvill, §6.1. Proposal §2 assigns half the block to checks.
         order = rng.random(signal_shape).argsort(axis=-1)
         checks = np.sort(order[..., :width], axis=-1)
         payload = np.sort(order[..., width:], axis=-1)
@@ -153,6 +172,8 @@ def simulate_paths(
             candidates, payload_index[secret, :, None], axis=-1,
         )[..., 0]
 
+        # Follow the phase sequence in Papadopoulos and Linvill, §4.1, Eqs. (1)–(3).
+        # Proposal §2 adds channel noise and the Eve chain on both legs.
         phases = np.exp(1j * rng.uniform(0, 2 * np.pi, size=signal_shape))
         states = np.stack((np.ones_like(phases), phases), axis=-1) / np.sqrt(2)
         _sample_paulis(states, rng, q_z, q_x)
@@ -168,7 +189,7 @@ def simulate_paths(
         )
         states[..., 1] *= phases.conj()
 
-        # Undoing the private phases followed by QFT† gives one decoded word.
+        # Sample the inverse-QFT measurement in Papadopoulos and Linvill, Eq. (3).
         amplitudes = states[..., None, :, 0] + states[..., None, :, 1] * rotations.conj()
         output_probabilities = (abs(amplitudes)**2 / 2).prod(axis=-1)
         cumulative = output_probabilities.cumsum(axis=-1)
@@ -178,6 +199,8 @@ def simulate_paths(
         observed = np.take_along_axis(decoded_blocks, checks, axis=-1)
         errors[:, attempt] = (observed != values).sum(axis=(1, 2))
 
+        # Proposal §2 uses joint check-pattern likelihoods. The notebook adds
+        # their negative logs across blocks as Bob's score.
         null = _null_decoding_probabilities(phases, candidates, rotations, q_z, q_x)
         candidate_checks = block_bits[:, checks].transpose(1, 2, 0, 3)
         same_pattern = (candidate_checks == observed[..., None, :]).all(axis=-1)
@@ -185,6 +208,8 @@ def simulate_paths(
         likelihood[likelihood >= _NEAR_ONE] = 1.0
         scores[:, attempt] = -np.log(np.maximum(likelihood, _TINY)).sum(axis=-1)
 
+        # Proposal §2 updates Eve's probabilities over the 16 secrets. The
+        # project stops Eve's interception after she makes a guess.
         attacking = interception_rates > 0
         if attacking.any():
             record_likelihood = _payload_likelihoods(
@@ -196,16 +221,17 @@ def simulate_paths(
                 active_log_posterior += np.log(np.maximum(hypothesis_likelihood, _TINY))
             active_log_posterior -= logsumexp(active_log_posterior, axis=-1, keepdims=True)
             log_posterior[attacking] = active_log_posterior
-            # Eve uses her own confidence to stop intercepting on later attempts.
             declared = np.exp(log_posterior.max(axis=1)) >= RECOVERY_CONFIDENCE
             interception_rates[declared] = 0.0
         if include_posterior:
             posterior[:, attempt] = np.exp(log_posterior)
 
-    # Drop the check bits and concatenate the final exchange's payload blocks.
+    # Extract the payload as in Papadopoulos and Linvill, §4.1, "Extraction."
+    # The notebook compares Bob's final decoded key with Alice's as a project policy.
     final_key = np.take_along_axis(decoded_blocks, payload, axis=-1).reshape(trials, 4)
     final_key_agrees = (final_key == secret_bits[secret]).all(axis=1)
 
+    # Project outputs for the detector comparison and bit-confidence plots.
     paths = {
         "secret": secret,
         "check_errors": errors,

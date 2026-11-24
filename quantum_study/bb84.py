@@ -13,11 +13,16 @@ import pandas as pd
 from scipy.stats import norm
 
 
+# Proposal §2 refers to Napieraj and Chuang (2026), Detecting Patient Attacks
+# on a Repeated Secret. Linked paper references are in BB84.ipynb#references.
+# The proposal defines the scores, check budgets, and alarm schedule below.
 DETECTORS = ("Pooled QBER", "Basis U2", "State U4")
 CHECK_BUDGETS = (20, 50, 100)
 LOOK_FRACTIONS = (0.25, 0.5, 1.0)
 
 
+# Erven et al. (2009, §4) report the reference rates. Proposal §2 gives the
+# synthetic profiles.
 def _noise_profiles():
     profiles = [("No noise", 0.0, 0.0), ("Erven reference", 0.002, 0.038)]
     for mean in (0.01, 0.02, 0.04):
@@ -30,6 +35,7 @@ def _noise_profiles():
     return tuple(profiles)
 
 
+# Project settings and seeds for the Monte Carlo runs defined in proposal §2.
 @dataclass(frozen=True)
 class BB84Config:
     noise_profiles: tuple
@@ -48,6 +54,7 @@ class BB84Config:
     cumulative_seed: int = 20261101
 
 
+# Notebook presets for proposal §2. Rates above 2.5% extend the proposal grid.
 def bb84_config(preset="quick"):
     """Return the fast notebook preset or the complete proposal grid."""
     if preset == "quick":
@@ -80,6 +87,9 @@ def bb84_config(preset="quick"):
     raise ValueError("preset must be 'quick' or 'broad'")
 
 
+# Bennett and Brassard (1984, pp. 175–177) define the preparations and sifting.
+# Scarani et al. (2009, §I.B.5) describe the intercept-resend error mechanism.
+# This model combines attack and baseline errors from proposal §2 as independent flips.
 def sample_checks(
     rng, intercept_fraction, eve_p_z, *, retained_checks, trials, baseline
 ):
@@ -90,6 +100,8 @@ def sample_checks(
     return counts, rng.binomial(counts, rates)
 
 
+# Proposal §2 gives the U4 weights. The implementation gives an impossible
+# mismatch under the noise-only model an infinite score.
 def _conditioned_score(counts, errors, baseline):
     variable = (baseline > 0) & (baseline < 1)
     rates = baseline[variable]
@@ -100,6 +112,8 @@ def _conditioned_score(counts, errors, baseline):
     return score
 
 
+# Proposal §2 defines pooled QBER, U2, and U4. Lo, Chau, and Ardehali (2005, §4.2)
+# motivate grouping by basis. Identical rates within each basis make U2 and U4 equal.
 def detector_scores(counts, errors, fitted_baseline):
     """Return pooled QBER, basis-grouped U2, and state-conditioned U4."""
     basis_baseline = fitted_baseline.reshape(2, 2).mean(1)
@@ -114,6 +128,7 @@ def detector_scores(counts, errors, fitted_baseline):
     return np.column_stack((errors.sum(1) / counts.sum(1), basis_score, state_score))
 
 
+# Proposal §2 sets the false-alarm target. The simulation randomizes ties.
 def _cutoffs(null_scores, target):
     rank = int(np.ceil((1 - target) * len(null_scores))) - 1
     cutoffs = np.partition(null_scores, rank, axis=0)[rank]
@@ -122,6 +137,7 @@ def _cutoffs(null_scores, target):
     return cutoffs, np.clip((target - above) / tied, 0.0, 1.0)
 
 
+# Wilson (1927, pp. 209–212) gives this binomial score interval.
 def _wilson(events, trials):
     rate, z = events / trials, 1.959963984540054
     denominator = 1 + z**2 / trials
@@ -132,6 +148,8 @@ def _wilson(events, trials):
     return np.clip(center - radius, 0, 1), np.clip(center + radius, 0, 1)
 
 
+# Lee et al. (2023, §III.A, Eqs. (1)–(4)) motivate the pooled normal approximation.
+# The weighted moments extend it to the proposal §2 scores and randomly sampled states.
 def _normal_moments(checks, true_baseline, fraction, eve_p_z, fitted):
     attack = 0.5 * fraction * np.repeat([1 - eve_p_z, eve_p_z], 2)
     alternative = true_baseline + (1 - 2 * true_baseline) * attack
@@ -154,6 +172,8 @@ def _normal_moments(checks, true_baseline, fraction, eve_p_z, fitted):
     return np.asarray(means), np.sqrt(variances)
 
 
+# Lee et al. (2023, §III.A) motivate normal-tail power. The pooled count uses a
+# continuity correction and includes the chance of alarming at the tied cutoff.
 def _normal_alarm(cutoffs, ties, means, deviations, checks):
     probabilities = np.empty(3)
     for index, (cutoff, tie, mean, deviation) in enumerate(
@@ -175,6 +195,7 @@ def _normal_alarm(cutoffs, ties, means, deviations, checks):
     return probabilities
 
 
+# Proposal §2 specifies the true-rate control and the (errors + 1/2) / (trials + 1) fit.
 def _fits(rng, true_rates, config):
     fits = [(0, 1, true_rates)]
     for size in config.calibration_sizes:
@@ -184,6 +205,7 @@ def _fits(rng, true_rates, config):
     return fits
 
 
+# Proposal §2 compares noise-only trials with different interception rates and bases.
 def _scenarios(config):
     return [(0.0, 0.5, False)] + [
         (fraction, eve_p_z, True)
@@ -193,6 +215,8 @@ def _scenarios(config):
     ]
 
 
+# Proposal §2 asks for one decision at the full budget and independent noise-only cutoffs.
+# All detectors use the same evaluation trials, as specified in the paired comparison.
 def run_terminal(config):
     """Run the single-look proposal comparison and return tidy results."""
     fit_rng, cutoff_rng, null_rng, attack_rng = [
@@ -254,6 +278,7 @@ def run_terminal(config):
     return pd.DataFrame(rows)
 
 
+# Proposal §2 uses repeated calibration to assess variation across independent fits.
 def summarize_calibration(results):
     """Summarize variation across independently fitted state baselines."""
     fitted = results[results["calibration_trials_per_state"].gt(0)]
@@ -270,6 +295,7 @@ def summarize_calibration(results):
     )
 
 
+# Proposal §2 compares cumulative checks, so each decision includes earlier samples.
 def _sample_looks(rng, looks, fraction, eve_p_z, *, trials, baseline):
     counts = np.zeros((trials, 4), dtype=int)
     errors = np.zeros_like(counts)
@@ -287,6 +313,7 @@ def _sample_looks(rng, looks, fraction, eve_p_z, *, trials, baseline):
     return np.stack(count_looks, 1), np.stack(error_looks, 1)
 
 
+# Apply the proposal §2 scores separately at each scheduled decision.
 def _scores_at_looks(counts, errors, fitted):
     return np.stack([
         detector_scores(counts[:, look], errors[:, look], fitted)
@@ -294,6 +321,7 @@ def _scores_at_looks(counts, errors, fitted):
     ], 1)
 
 
+# Project implementation for comparing proposal §2 scores across check counts.
 def _standardize(scores, centers, scales):
     delta = scores - centers
     standardized = np.zeros_like(delta, dtype=float)
@@ -304,6 +332,7 @@ def _standardize(scores, centers, scales):
     return standardized
 
 
+# Project implementation. The moments from _normal_moments set the scale at each decision.
 def _null_standardization(looks, fitted):
     centers, scales = [], []
     for look in looks:
@@ -313,6 +342,7 @@ def _null_standardization(looks, fitted):
     return np.asarray(centers), np.asarray(scales)
 
 
+# Proposal §2 targets a 5% chance of any false alarm across the scheduled decisions.
 def run_cumulative(config):
     """Run the familywise-calibrated repeated-look comparison."""
     fit_rng, cutoff_rng, null_rng, attack_rng = [
@@ -332,6 +362,7 @@ def run_cumulative(config):
                 trials=config.cumulative_cutoff_trials, baseline=true_rates,
             )
             rules = []
+            # Project implementation. The largest standardized score calibrates all decisions together.
             for _, _, fit in fits:
                 centers, scales = _null_standardization(looks, fit)
                 maxima = _standardize(
@@ -382,6 +413,7 @@ def run_cumulative(config):
     return pd.DataFrame(rows)
 
 
+# Project display helper for the settings chosen in BB84.ipynb#configuration.
 def _selected(results, profile, calibration_size, fit, eve_p_z):
     selected = results[
         results["noise_profile"].eq(profile)
@@ -395,6 +427,7 @@ def _selected(results, profile, calibration_size, fit, eve_p_z):
     return selected
 
 
+# Proposal §3 asks for false alarms and detection power. The bands use Wilson (1927).
 def plot_alarm_curves(
     results, config, *, profile, calibration_size, fit, eve_p_z,
     cumulative=False,

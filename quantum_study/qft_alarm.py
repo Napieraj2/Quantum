@@ -21,6 +21,8 @@ from .qft_study import (
 )
 
 
+# Project follow-up in README.md#qft-alarm-response-results. Reuse the fixed
+# schedule and randomly choose the number and timing of earlier decisions.
 def _look_schedules(rng, trials, attempts, look_range):
     fewest, most = look_range
     fixed = _percentage_looks(attempts)
@@ -31,6 +33,8 @@ def _look_schedules(rng, trials, attempts, look_range):
     return {"Percentage": np.broadcast_to(fixed, (trials, len(fixed))), "Random": random}
 
 
+# Proposal §2 (Napieraj and Chuang, 2026) sets the 5% chance of any noise-only
+# alarm. This follow-up uses the same target for each schedule.
 def _fit_schedule(totals, looks):
     # In stationary noise, the null distribution depends on the window length.
     # At a given length, pooled errors and the pooled error rate have the same z-score.
@@ -42,6 +46,8 @@ def _fit_schedule(totals, looks):
     return centers, scales, cutoff, tie_probability
 
 
+# Project reset policy in validation/MODEL_NOTES.md#glossary. Clear Bob's
+# accumulated score after an early alarm and keep testing the same key.
 def _replay_alarms(totals, looks, rule, ties):
     """Return when Bob first alarms, whether he resets, and whether he alarms at the end."""
     trials, attempts = totals.shape
@@ -52,6 +58,7 @@ def _replay_alarms(totals, looks, rule, ties):
     discarded = np.zeros(trials, dtype=totals.dtype)
     tie_draw = ties[:, 0].copy()
 
+    # Reuse the fitted noise rule on the checks collected since the last reset.
     def crosses(look):
         window = look - last_reset - 1
         segment = totals[rows, look - 1] - discarded
@@ -65,11 +72,14 @@ def _replay_alarms(totals, looks, rule, ties):
         discarded[reset] = totals[rows[reset], look[reset] - 1]
         tie_draw[reset] = ties[reset, index]
 
+    # Under the follow-up policy, an alarm at the final attempt rejects the key.
     final_alarm = crosses(attempts)
     first_crossing[final_alarm] = np.minimum(first_crossing[final_alarm], attempts)
     return first_crossing, last_reset > 0, final_alarm
 
 
+# Project follow-up comparing alarm schedules and responses for X-only Eves.
+# See README.md#qft-alarm-response-results for the saved settings and results.
 def run_qft_alarm_comparison(
     *, attempts=100, trials=1024, block_qubits=2, intercept_probability=0.025,
     coalition_sizes=(1, 2, 4, 8, 16), random_look_range=(2, 4),
@@ -88,6 +98,7 @@ def run_qft_alarm_comparison(
     if type(fewest) is not int or type(most) is not int or not 2 <= fewest <= most <= attempts:
         raise ValueError("random_look_range must be within [2, attempts]")
 
+    # Proposal §2 separates fitting, noise-only evaluation, and attack samples.
     fit_seed, noise_seed, attack_seed, schedule_seed, tie_seed = np.random.SeedSequence(seed).spawn(5)
     schedule_rng = np.random.default_rng(schedule_seed)
     fit_looks, noise_looks, attack_looks = (
@@ -116,6 +127,7 @@ def run_qft_alarm_comparison(
             noise_rates[key] = np.mean(first <= attempts), final.mean()
     del noise_totals, totals
 
+    # Reuse each attack path across both detectors, schedules, and alarm responses.
     results = []
     for eve_count, path_seed in zip(coalition_sizes, attack_seed.spawn(len(coalition_sizes))):
         paths = simulate_paths(
@@ -136,7 +148,8 @@ def run_qft_alarm_comparison(
                 noise_crossing, noise_final = noise_rates[key]
                 settings = {
                     "eve_count": eve_count,
-                    # Per qubit-leg probability that at least one Eve intercepts.
+                    # Proposal §2 assumes independent interception. This is the
+                    # chance that at least one Eve hits a qubit on a given leg.
                     "effective_intercept_probability": 1 - (1 - intercept_probability) ** eve_count,
                     "schedule": schedule,
                     "detector": detector,
@@ -145,6 +158,8 @@ def run_qft_alarm_comparison(
                     "attack_crossing_rate": crossed.mean(),
                     "recovered_before_first_crossing": int((recovered & (declared_at < first)).sum()),
                 }
+                # Project key-acceptance rules in validation/MODEL_NOTES.md#glossary.
+                # Both responses require Bob's final key to match Alice's.
                 for policy, rejected, noise_rejected, reset_sessions in (
                     ("Reject on alarm", crossed, noise_crossing, False),
                     ("Reset on interim alarm", final, noise_final, reset),

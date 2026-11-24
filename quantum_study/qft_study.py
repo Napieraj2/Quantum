@@ -14,11 +14,15 @@ from .qft_exchange import (
 )
 
 
+# Proposal §2 (Napieraj and Chuang, 2026) sets the 5% false-alarm target.
+# The two QFT scores and the reproducible seed are project settings.
+# See validation/MODEL_NOTES.md for the source map.
 DETECTORS = ("Pooled check errors", "Joint-check surprisal")
 TARGET_FALSE_ALARM = 0.05
 DEFAULT_SEED = 20261122
 
 
+# Project representation of the alarm rule fitted on noise-only trials in proposal §2.
 @dataclass(frozen=True)
 class _AlarmRule:
     looks: np.ndarray
@@ -28,6 +32,7 @@ class _AlarmRule:
     tie_probability: float
 
 
+# Project implementation for comparing scores at different scheduled attempts.
 def _standardize(values, centers, scales):
     delta = values - centers
     scores = np.zeros_like(delta, dtype=float)
@@ -37,6 +42,8 @@ def _standardize(values, centers, scales):
     return scores
 
 
+# Proposal §2 targets any alarm in a noise-only trial. The simulation fits an
+# empirical cutoff and randomizes decisions tied at that cutoff.
 def _fit_cutoff(maxima, target=TARGET_FALSE_ALARM):
     rank = int(np.ceil((1 - target) * len(maxima))) - 1
     cutoff = float(np.partition(maxima, rank)[rank])
@@ -46,6 +53,8 @@ def _fit_cutoff(maxima, target=TARGET_FALSE_ALARM):
     return cutoff, tie_probability
 
 
+# Project implementation of proposal §2's schedule-wide target. Fit the rule
+# to the maximum standardized score across each noise-only trial's decisions.
 def _fit_alarm_rule(values, looks, target=TARGET_FALSE_ALARM):
     selected = values[:, looks - 1]
     centers = selected.mean(axis=0)
@@ -55,6 +64,8 @@ def _fit_alarm_rule(values, looks, target=TARGET_FALSE_ALARM):
     return _AlarmRule(looks, centers, scales, cutoff, tie_probability)
 
 
+# Proposal §2 measures recovery before Bob's first alarm. Use the first
+# qualifying decision and mark trials without an alarm as beyond the cap.
 def _first_alarms(values, rule, tie_draws):
     scores = _standardize(
         values[:, rule.looks - 1], rule.centers, rule.scales
@@ -68,12 +79,15 @@ def _first_alarms(values, rule, tie_draws):
     return np.where(has_alarm, rule.looks[first], values.shape[1] + 1)
 
 
+# Proposal §2's cumulative schedule uses the checks collected so far.
 def _check_totals(paths):
     errors = np.cumsum(np.asarray(paths["check_errors"]), axis=1)
     joint = np.cumsum(np.asarray(paths["joint_score"]), axis=1)
     return errors, joint
 
 
+# The QFT notebook uses proposal §2's pooled error rate and check-pattern
+# likelihoods. Its joint score sums the negative log likelihoods.
 def _detector_statistics(paths):
     errors, joint = _check_totals(paths)
     checks = CHECKS_PER_ATTEMPT * np.arange(1, errors.shape[1] + 1)
@@ -81,6 +95,8 @@ def _detector_statistics(paths):
     return dict(zip(DETECTORS, (pooled, joint)))
 
 
+# Proposal §2 reports guesses at 99% confidence. The study records the first
+# complete attempt at which Eve reaches that threshold.
 def _declarations(paths, attempts):
     posterior = np.asarray(paths["posterior"])
     confidence = posterior.max(axis=2)
@@ -93,6 +109,8 @@ def _declarations(paths, attempts):
     return declaration_attempt, declaration_guess
 
 
+# Project plot metric from proposal §2's 16-key posterior. Select the marginal
+# probability that Eve assigned to each bit Alice actually sent.
 def _true_bit_probabilities(paths):
     secret = np.asarray(paths["secret"], dtype=int)
     secret_bits = (
@@ -102,10 +120,12 @@ def _true_bit_probabilities(paths):
     return np.where(secret_bits[:, None, :] == 1, bit_one, 1 - bit_one)
 
 
+# Proposal §§2–3 ask for recovery before alarm, false alarms, and costs.
 def _study_rows(
     paths, detector, alarm_attempt, false_alarm_attempt,
     declaration_attempt, declaration_guess, attempts, block_qubits,
 ):
+    # Strictly before Bob's alarm is required by proposal §2, so Bob wins a tie.
     secret = np.asarray(paths["secret"], dtype=int)
     alarm_first = (
         (alarm_attempt <= attempts) & (alarm_attempt <= declaration_attempt)
@@ -116,13 +136,13 @@ def _study_rows(
     correct = declaration_first & (declaration_guess == secret)
     incorrect = declaration_first & ~correct
     inconclusive = ~(alarm_first | declaration_first)
-    # Bob's session runs until his own alarm or the attempt cap.
+    # Count the costs requested in proposal §3 through Bob's alarm or the cap (§2).
     session_attempt = np.minimum(alarm_attempt, attempts)
     blocks_per_attempt = 4 // (block_qubits // 2)
     transmitted_per_attempt = 2 * block_qubits * blocks_per_attempt
 
-    # Eve's declaration ends first-outcome scoring. Acceptance uses Bob's
-    # alarm result through the final look, including alarms after a declaration.
+    # Project acceptance rule in QFT_Repeated_Secret.ipynb. Use Bob's alarms
+    # through the final decision and require his decoded key to match Alice's.
     accepted = (alarm_attempt > attempts) & paths["final_key_agrees"]
     accepted_sessions = int(accepted.sum())
     exposed_accepted_keys = int((accepted & correct).sum())
@@ -149,6 +169,7 @@ def _study_rows(
     return summary, alarm_first, correct, declaration_first
 
 
+# Project plots for proposal §3's alarm and recovery results over time.
 def _curve_rows(
     paths, detector, alarm_attempt, declaration_attempt,
     alarm_first, correct, declaration_first, attempts, block_qubits,
@@ -188,16 +209,20 @@ def _curve_rows(
     return rows
 
 
+# Adapt proposal §2's check-budget fractions to fractions of the attempt cap.
 def _percentage_looks(attempts):
     return np.ceil(attempts * np.asarray((0.25, 0.5, 1.0))).astype(int)
 
 
+# Project validation for the QFT notebook's range of attempt caps and block settings.
 def _validate_study(attempts, trials, block_qubits, intercept_probability):
     _validate_path_settings(trials, attempts, block_qubits, intercept_probability)
     if attempts < 4:
         raise ValueError("attempts must be an integer of at least four")
 
 
+# Paired comparison for proposal §2. Default error rates come from Erven et al.
+# (2009, §4). The notebook chooses the two Eve basis biases.
 def run_qft_study(
     attempts=100,
     trials=256,
@@ -221,6 +246,7 @@ def run_qft_study(
     if not eve_z_probabilities:
         raise ValueError("eve_z_probabilities must contain at least one basis bias")
 
+    # Proposal §2 calls for independent fitting and noise-only evaluation trials.
     looks = _percentage_looks(attempts)
     fit_root, null_root, attack_root, null_ties, attack_ties = (
         np.random.SeedSequence(seed).spawn(5)
@@ -241,6 +267,7 @@ def run_qft_study(
         **common,
     )
 
+    # Use the same checks for both detectors, as in proposal §2's paired comparison.
     fit_statistics = _detector_statistics(fitted_null)
     null_statistics = _detector_statistics(heldout_null)
     attack_statistics = _detector_statistics(attack)
@@ -264,6 +291,7 @@ def run_qft_study(
     }
     declaration_attempt, declaration_guess = _declarations(attack, attempts)
 
+    # Package proposal §3 outcomes and project acceptance metrics for the notebook.
     summaries, curves = [], []
     for detector in DETECTORS:
         summary, alarm_first, correct, declaration_first = _study_rows(

@@ -27,6 +27,8 @@ BB84 and QFT start with the Erven reference noise rates. The BB84 notebook offer
 
 The block-size comparison covers 1, 2, 4, 8, and 16 qubits per block. All five settings carry the same four-bit secret. The 16-qubit block uses twelve hidden checks per attempt, compared with four checks at the other sizes. [Comparison plot](results/qft_block_sizes/comparison.png) · [Counts and settings](results/qft_block_sizes/comparison.csv)
 
+To include hardware measurements in the repeated-secret simulation, run the gate baseline with `RUN_MODE = "hardware"`, then set `USE_HARDWARE_BASELINE = True` in the repeated-secret notebook. It reads `results/gate_baseline_hardware.json` to model Bob's measurement errors and recalibrate his alarms. For a local test, run the gate baseline in Aer and point `GATE_BASELINE_FILE` at `results/gate_baseline_aer.json`. [Gate baseline](Gate_Baseline.ipynb) · [Repeated-secret notebook](QFT_Repeated_Secret.ipynb)
+
 ## QFT alarm-response results
 
 The X-only sweep tested 300 attack settings with 1,024 trials each and a 100-attempt cap. **Reject on alarm** discards the key as soon as Bob alarms. **Reset on early alarm** lets Bob dismiss an alarm before the final attempt, clear his accumulated evidence, and keep testing the same key. Both policies reject the key if Bob alarms on the final attempt or his key differs from Alice's. Bob makes alarm decisions at attempts 25, 50, and 100 on the fixed schedule. The random schedule chooses 2–4 attempts for those decisions, always including attempt 100. [Full sweep data](results/qft_alarm_policy_sweep.csv)

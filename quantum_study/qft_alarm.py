@@ -83,7 +83,7 @@ def _replay_alarms(totals, looks, rule, ties):
 def run_qft_alarm_comparison(
     *, attempts=100, trials=1024, block_qubits=2, intercept_probability=0.025,
     coalition_sizes=(1, 2, 4, 8, 16), random_look_range=(2, 4),
-    q_z=0.002, q_x=0.038, seed=DEFAULT_SEED,
+    q_z=0.002, q_x=0.038, seed=DEFAULT_SEED, readout_errors=(0.0, 0.0),
 ):
     """Compare alarms and final key acceptance for X-only coalitions.
 
@@ -106,7 +106,10 @@ def run_qft_alarm_comparison(
     )
     # Reuse a tie draw until the score resets, then draw independently for the fresh window.
     noise_ties, attack_ties = np.random.default_rng(tie_seed).random((2, trials, max(3, most)))
-    common = dict(trials=trials, attempts=attempts, qubits=block_qubits, q_z=q_z, q_x=q_x)
+    common = dict(
+        trials=trials, attempts=attempts, qubits=block_qubits,
+        q_z=q_z, q_x=q_x, readout_errors=readout_errors,
+    )
     fit_totals = _check_totals(simulate_paths(
         np.random.default_rng(fit_seed), include_posterior=False, **common,
     ))

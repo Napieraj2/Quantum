@@ -133,6 +133,19 @@ def _null_decoding_probabilities(phases, candidates, rotations, q_z, q_x):
     return probabilities.mean(axis=-2)
 
 
+# Apply the Z-control assignment probabilities from Gate_Baseline.ipynb.
+def _readout_distribution(probabilities, readout_errors):
+    """Apply an independent 0↔1 measurement error to each decoded bit."""
+    p01, p10 = readout_errors
+    assignment = np.array([[1 - p01, p01], [p10, 1 - p10]])
+    stride = 1
+    while stride < probabilities.shape[-1]:
+        pairs = probabilities.reshape(probabilities.shape[:-1] + (-1, 2, stride))
+        probabilities = np.einsum("...bs,bt->...ts", pairs, assignment).reshape(probabilities.shape)
+        stride *= 2
+    return probabilities
+
+
 # Use the periodic Fourier factors in Papadopoulos and Linvill, §4.1, Eq. (3).
 def _decode_wide_block(states, rotations, rng):
     """Sample the Fourier measurement from its least significant bit upward."""
@@ -214,6 +227,74 @@ def _fourier_bit_one_probabilities(coherence):
     return marginal[..., ::-1]
 
 
+def _fourier_readout_pattern_probability(
+    coherence, observed, checks, readout_errors
+):
+    """Likelihood of an observed check pattern after asymmetric readout."""
+    p01, p10 = readout_errors
+    grid, real_transfer, imag_transfer, at_half = _half_frequency_transfer()
+    cosine = np.cos(np.pi * grid / 2)
+    sine = np.sin(np.pi * grid / 2)
+    shape = coherence.shape[:-1] + (len(grid),)
+    real = np.ones(shape)
+    imag_scaled = np.zeros(shape)
+    likelihood = np.ones(coherence.shape[:-1])
+
+    for signal in range(coherence.shape[-1]):
+        position = coherence.shape[-1] - 1 - signal
+        selected = checks == position
+        is_check = selected.any(axis=-1)
+        value = (observed * selected).sum(axis=-1)
+        m0 = np.where(is_check, np.where(value == 0, 1 - p01, p01), 1.0)
+        m1 = np.where(is_check, np.where(value == 0, p10, 1 - p10), 1.0)
+
+        rotation = np.exp(-1j * np.pi * (0.5 - 0.5**(signal + 1)))
+        aligned = coherence[..., signal] * rotation
+        a, b = aligned.real[..., None], aligned.imag[..., None]
+        weighted = a * real - 0.5 * b * imag_scaled
+        h = (0.5 + weighted @ at_half).clip(0.0, 1.0)
+        step = m0[..., None] * h + m1[..., None] * (1 - h)
+        likelihood *= step
+        if signal + 1 == coherence.shape[-1]:
+            break
+
+        r_half, r_plus, r_minus = np.moveaxis(
+            (real @ real_transfer).reshape(shape + (3,)), -1, 0
+        )
+        i_half, i_plus, i_minus = np.moveaxis(
+            (imag_scaled @ imag_transfer).reshape(shape + (3,)), -1, 0
+        )
+        half = r_half + 1j * i_half
+        plus = r_plus + 1j * i_plus
+        minus = r_minus - 1j * i_minus
+        total = m0 + m1
+        difference = m0 - m1
+        c = 0.5 * (
+            total[..., None] * cosine
+            + 1j * difference[..., None] * sine
+        )
+        d = 0.5 * (
+            difference[..., None] * cosine
+            + 1j * total[..., None] * sine
+        )
+        updated = (
+            c[..., None, :] * half
+            + d[..., None, :] * (
+                aligned[..., None] * plus
+                + aligned[..., None].conj() * minus
+            )
+        )
+        nonzero = step > 0
+        np.divide(
+            updated, step[..., None], out=updated,
+            where=nonzero[..., None],
+        )
+        updated[~nonzero] = 1.0
+        real = updated.real
+        imag_scaled = updated.imag / grid
+    return likelihood.mean(axis=-1)
+
+
 # Adapt the weighted error score in proposal §2 to QFT's prepared phases and
 # announced checks. Use the marginal error probability for each retained bit.
 def _prepared_state_score(null, candidate_checks, values, mismatches):
@@ -278,16 +359,21 @@ def _eve_biases(probabilities):
 def simulate_paths(
     rng, *, trials, qubits, q_z, q_x, attempts,
     intercept_probability=0.0, eve_z_probabilities=(), include_posterior=True,
-    include_prepared_state=False,
+    include_prepared_state=False, readout_errors=(0.0, 0.0),
 ):
     """Sample exchanges through the cap, with interception ending at Eve's declaration.
 
     Stopping interception and confirming the final decoded key are policies
     introduced for this experiment.
+    Readout errors are Bob's assignment probabilities (P(1|0), P(0|1)).
     """
     _validate_path_settings(trials, attempts, qubits, intercept_probability)
     if not (q_z >= 0 and q_x >= 0 and q_z + q_x <= 1):
         raise ValueError("q_z and q_x must be nonnegative and sum to at most one")
+    readout_errors = np.asarray(readout_errors, dtype=float)
+    if readout_errors.shape != (2,) or not np.all((0 <= readout_errors) & (readout_errors <= 1)):
+        raise ValueError("readout_errors must contain P(1|0) and P(0|1) in [0, 1]")
+    has_readout_errors = readout_errors.any()
     eve_z_probabilities = _eve_biases(eve_z_probabilities)
 
     # Proposal §2 uses the same secret in each attempt and fresh checks in each block.
@@ -367,6 +453,9 @@ def simulate_paths(
             cumulative /= cumulative[..., -1:]
             outcomes = (rng.random((trials, blocks, 1)) > cumulative).sum(axis=-1)
         decoded_blocks = block_bits[outcomes]
+        if has_readout_errors:
+            # The baseline describes Bob's reported bits after Eve's measurements.
+            decoded_blocks ^= rng.random(decoded_blocks.shape) < readout_errors[decoded_blocks]
         observed = np.take_along_axis(decoded_blocks, checks, axis=check_axis)
         mismatches = observed != values
         errors[:, attempt] = mismatches.sum(axis=(1, 2))
@@ -375,14 +464,22 @@ def simulate_paths(
         # their negative logs across blocks as Bob's score.
         if wide_block:
             coherence = _null_coherence(phases, candidates, rotations, q_z, q_x)
-            # The encoded candidates and the possible decoded words share the
-            # same payload positions, but the observed check values can differ.
-            check_offset = ((observed - values) * weights[checks]).sum(axis=-1)
-            output_words = candidates + check_offset[..., None]
-            likelihood = _fourier_pattern_probability(coherence, rotations, output_words)
+            if has_readout_errors:
+                likelihood = _fourier_readout_pattern_probability(
+                    coherence, observed, checks, readout_errors,
+                )
+            else:
+                # The encoded candidates and possible decoded words share the
+                # same payload positions, with different check values.
+                check_offset = ((observed - values) * weights[checks]).sum(axis=-1)
+                output_words = candidates + check_offset[..., None]
+                likelihood = _fourier_pattern_probability(coherence, rotations, output_words)
             if include_prepared_state:
                 p_one = _fourier_bit_one_probabilities(coherence)
                 check_ones = np.take_along_axis(p_one, checks, axis=-1)
+                if has_readout_errors:
+                    p01, p10 = readout_errors
+                    check_ones = p01 + (1 - p01 - p10) * check_ones
                 rates = np.where(values != 0, 1 - check_ones, check_ones)
                 prepared_state_scores[:, attempt] = _weighted_check_errors(rates, mismatches)
         else:
@@ -393,6 +490,8 @@ def simulate_paths(
             else:
                 null = _null_decoding_probabilities(phases, candidates, rotations, q_z, q_x)
                 candidate_checks = block_bits[:, checks].transpose(1, 2, 0, 3)
+            if has_readout_errors:
+                null = _readout_distribution(null, readout_errors)
             same_pattern = (candidate_checks == observed[..., None, :]).all(axis=-1)
             likelihood = (null * same_pattern).sum(axis=-1)
             if include_prepared_state:

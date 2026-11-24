@@ -1,6 +1,8 @@
 """Paired QFT alarm and repeated-secret recovery study."""
 
 from dataclasses import dataclass
+import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -21,6 +23,25 @@ DETECTORS = ("Pooled check errors", "Joint-check surprisal")
 PREPARED_STATE_DETECTOR = "Prepared-state check errors"
 TARGET_FALSE_ALARM = 0.05
 DEFAULT_SEED = 20261122
+
+
+# The matched Z-basis controls in Gate_Baseline.ipynb supply these counts.
+def load_gate_baseline(path):
+    """Load the exported assignment probabilities and their provenance."""
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(f"{path} is missing. Run Gate_Baseline.ipynb to create it.")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or data.get("source") not in ("hardware", "aer"):
+        raise ValueError(f"{path} must be a hardware or Aer export from Gate_Baseline.ipynb")
+    rates = []
+    for bit in (0, 1):
+        shots = data.get(f"shots_{bit}")
+        errors = data.get(f"errors_{bit}")
+        if type(shots) is not int or type(errors) is not int or shots < 1 or not 0 <= errors <= shots:
+            raise ValueError(f"{path} has invalid Z-control shot or error counts for bit {bit}")
+        rates.append(errors / shots)
+    return tuple(rates), data
 
 
 # Project representation of the alarm rule fitted on noise-only trials in proposal §2.
@@ -239,6 +260,7 @@ def run_qft_study(
     seed=DEFAULT_SEED,
     *,
     compare_prepared_state=False,
+    readout_errors=(0.0, 0.0),
 ):
     """Compare QFT detectors on shared trials.
 
@@ -248,6 +270,7 @@ def run_qft_study(
     attack path. Looks occur at 25%, 50%, and 100% of the attempt cap; this is
     separate from the proposal's 20/50/100 retained-check factorial.
     Set ``compare_prepared_state`` to include the weighted marginal check errors.
+    Use ``readout_errors`` for Bob's P(1|0) and P(0|1) assignment probabilities.
     """
     _validate_study(attempts, trials, block_qubits, intercept_probability)
     eve_z_probabilities = _eve_biases(eve_z_probabilities)
@@ -266,6 +289,7 @@ def run_qft_study(
         q_x=q_x,
         attempts=attempts,
         include_prepared_state=compare_prepared_state,
+        readout_errors=readout_errors,
     )
     fitted_null = simulate_paths(np.random.default_rng(fit_root), include_posterior=False, **common)
     heldout_null = simulate_paths(np.random.default_rng(null_root), include_posterior=False, **common)

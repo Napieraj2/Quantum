@@ -1,17 +1,26 @@
+import json
+from pathlib import Path
+import tempfile
 import unittest
 
 import numpy as np
 from pandas.testing import assert_frame_equal
 
-from quantum_study.qft_alarm import _look_schedules, _replay_alarms
+from quantum_study.qft_alarm import (
+    _look_schedules,
+    _replay_alarms,
+    run_qft_alarm_comparison,
+)
 from quantum_study.qft_exchange import (
     _decode_wide_block,
     _fourier_bit_one_probabilities,
     _fourier_pattern_probability,
+    _fourier_readout_pattern_probability,
     _null_coherence,
     _null_decoding_probabilities,
     _payload_likelihoods,
     _prepared_state_score,
+    _readout_distribution,
     _rotations,
     simulate_paths,
 )
@@ -20,6 +29,7 @@ from quantum_study.qft_study import (
     _curve_rows,
     _declarations,
     _study_rows,
+    load_gate_baseline,
     run_qft_study,
 )
 
@@ -49,6 +59,44 @@ _CHECK_DISTRIBUTIONS = {
 
 
 class QFTStudyTests(unittest.TestCase):
+    def test_gate_baseline_loader_uses_z_control_counts_and_validates_exports(self):
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            path = directory / "baseline.json"
+            for source, counts, expected in (
+                ("hardware", (1000, 17, 800, 32), (0.017, 0.04)),
+                ("aer", (250, 5, 500, 15), (0.02, 0.03)),
+            ):
+                shots_0, errors_0, shots_1, errors_1 = counts
+                exported = {
+                    "source": source,
+                    "shots_0": shots_0,
+                    "errors_0": errors_0,
+                    "shots_1": shots_1,
+                    "errors_1": errors_1,
+                }
+                path.write_text(json.dumps(exported), encoding="utf-8")
+                rates, provenance = load_gate_baseline(path)
+                np.testing.assert_allclose(rates, expected, atol=0, rtol=0)
+                self.assertEqual(provenance, exported)
+
+            with self.assertRaises(FileNotFoundError):
+                load_gate_baseline(directory / "missing.json")
+
+            path.write_text(json.dumps({
+                "source": "hardware", "shots_0": 10, "errors_0": 11,
+                "shots_1": 10, "errors_1": 0,
+            }), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_gate_baseline(path)
+
+            path.write_text(json.dumps({
+                "source": "unknown", "shots_0": 10, "errors_0": 0,
+                "shots_1": 10, "errors_1": 0,
+            }), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_gate_baseline(path)
+
     def test_random_alarm_looks_include_the_end_and_vary_by_session(self):
         schedules = _look_schedules(np.random.default_rng(17), 64, 100, (2, 4))
         self.assertTrue((schedules["Percentage"] == [25, 50, 100]).all())
@@ -277,6 +325,29 @@ class QFTStudyTests(unittest.TestCase):
             for metric in ("check_errors", "joint_score", "prepared_state_score"):
                 np.testing.assert_array_equal(paths[metric], 0)
 
+    def test_asymmetric_readout_distribution_matches_direct_assignment(self):
+        rng = np.random.default_rng(29)
+        probabilities = rng.dirichlet(np.arange(1, 9), size=2)
+        readout_errors = (0.13, 0.27)
+        assignment = np.array([
+            [1 - readout_errors[0], readout_errors[0]],
+            [readout_errors[1], 1 - readout_errors[1]],
+        ])
+        bits = (np.arange(8)[:, None] >> np.arange(2, -1, -1)) & 1
+        transition = np.empty((8, 8))
+        for encoded, encoded_bits in enumerate(bits):
+            transition[encoded] = np.prod(
+                assignment[encoded_bits, bits], axis=1,
+            )
+        expected = probabilities @ transition
+        np.testing.assert_allclose(
+            _readout_distribution(probabilities, readout_errors),
+            expected,
+            atol=2e-16,
+            rtol=0,
+        )
+        np.testing.assert_allclose(expected.sum(axis=1), 1.0, atol=2e-16, rtol=0)
+
     def test_sixteen_qubit_fourier_helpers_match_dense_distribution(self):
         qubits = 16
         q_z, q_x = 0.002, 0.038
@@ -323,6 +394,31 @@ class QFTStudyTests(unittest.TestCase):
             np.arange(2**qubits)[:, None]
             >> np.arange(qubits - 1, -1, -1)
         ) & 1
+        checks = np.setdiff1d(np.arange(qubits), payload)[None, None]
+        observed = (
+            (0x39A7 >> (qubits - 1 - checks)) & 1
+        )
+        readout_errors = (0.07, 0.19)
+        assignment = np.array([
+            [1 - readout_errors[0], readout_errors[0]],
+            [readout_errors[1], 1 - readout_errors[1]],
+        ])
+        observed_probability = np.prod(
+            assignment[
+                decoded_bits[:, checks[0, 0]],
+                observed[0, 0],
+            ],
+            axis=1,
+        )
+        np.testing.assert_allclose(
+            _fourier_readout_pattern_probability(
+                coherence, observed, checks, readout_errors,
+            )[0, 0],
+            dense @ observed_probability,
+            atol=1e-13,
+            rtol=0,
+        )
+
         expected_marginals = dense @ decoded_bits
         np.testing.assert_allclose(
             _fourier_bit_one_probabilities(coherence)[0, 0],
@@ -340,6 +436,74 @@ class QFTStudyTests(unittest.TestCase):
         np.testing.assert_array_equal(
             _decode_wide_block(states, rotations, np.random.default_rng(23)),
             words,
+        )
+
+    def test_certain_readout_flip_is_part_of_bobs_null_model(self):
+        for qubits in (1, 2, 4, 8, 16):
+            paths = simulate_paths(
+                np.random.default_rng(31), trials=4, qubits=qubits,
+                q_z=0.0, q_x=0.0, attempts=2, include_posterior=False,
+                include_prepared_state=True, readout_errors=(1.0, 1.0),
+            )
+            expected_errors = 12 if qubits == 16 else 4
+            np.testing.assert_array_equal(
+                paths["check_errors"], expected_errors,
+            )
+            self.assertFalse(paths["final_key_agrees"].any())
+            np.testing.assert_array_equal(paths["joint_score"], 0)
+            np.testing.assert_array_equal(paths["prepared_state_score"], 0)
+
+        summary, _ = run_qft_study(
+            attempts=4, trials=8, block_qubits=2, intercept_probability=0.0,
+            q_z=0.0, q_x=0.0, seed=47, compare_prepared_state=True,
+            readout_errors=(1.0, 1.0),
+        )
+        np.testing.assert_array_equal(summary["accepted_sessions"], 0)
+
+        comparison = run_qft_alarm_comparison(
+            attempts=4, trials=8, block_qubits=2, intercept_probability=0.0,
+            coalition_sizes=(1,), random_look_range=(2, 2), q_z=0.0,
+            q_x=0.0, seed=53, readout_errors=(1.0, 1.0),
+        )
+        np.testing.assert_array_equal(comparison["accepted_sessions"], 0)
+
+    def test_zero_readout_switch_preserves_seeded_public_results(self):
+        path_settings = dict(
+            trials=8, qubits=4, q_z=0.002, q_x=0.038, attempts=4,
+            intercept_probability=0.2, eve_z_probabilities=(0.1, 0.9),
+            include_prepared_state=True,
+        )
+        baseline = simulate_paths(np.random.default_rng(37), **path_settings)
+        explicit = simulate_paths(
+            np.random.default_rng(37), readout_errors=(0.0, 0.0),
+            **path_settings,
+        )
+        self.assertEqual(baseline.keys(), explicit.keys())
+        for name in baseline:
+            np.testing.assert_array_equal(baseline[name], explicit[name])
+
+        study_settings = dict(
+            attempts=4, trials=8, block_qubits=2,
+            intercept_probability=0.2, compare_prepared_state=True, seed=41,
+        )
+        baseline_study = run_qft_study(**study_settings)
+        explicit_study = run_qft_study(
+            **study_settings, readout_errors=(0.0, 0.0),
+        )
+        for baseline_frame, explicit_frame in zip(baseline_study, explicit_study):
+            assert_frame_equal(baseline_frame, explicit_frame, check_exact=True)
+
+        alarm_settings = dict(
+            attempts=4, trials=8, block_qubits=2,
+            intercept_probability=0.2, coalition_sizes=(1,),
+            random_look_range=(2, 2), seed=43,
+        )
+        assert_frame_equal(
+            run_qft_alarm_comparison(**alarm_settings),
+            run_qft_alarm_comparison(
+                **alarm_settings, readout_errors=(0.0, 0.0),
+            ),
+            check_exact=True,
         )
 
     def test_one_qubit_full_x_interception_recovers_each_payload_bit(self):

@@ -104,6 +104,12 @@ An initial proposal-range check used 4,096 trials in each batch, 100 attempts, f
 
 For the two-qubit run, the holdout false-alarm counts were 215, 219, and 243 out of 4,096, respectively. A second seed (`20261123`) gave 38, 39, and 100 recoveries, with 197, 194, and 219 false alarms. The new score allowed more recoveries in this setting under both seeds. The saved proposal results cover the wider two-detector comparison. [Saved proposal sweep](../results/proposal_setting_results.zip)
 
+## Hardware-informed measurement option
+
+The gate baseline exports wrong outcomes and shot counts for the prepared `|0⟩` and `|1⟩` same-state controls measured in Z. The QFT switch uses their fractions as effective assignment probabilities `P(1|0)` and `P(0|1)`. The measurements include state preparation. The model applies rates from one physical qubit independently to each decoded bit at Bob. His check scores and final key agreement both use the reported bits. Alarm fitting and held-out false-alarm trials use the same assignment model. The existing per-leg Pauli rates still describe the link.
+
+The X–X and H–H round-trip bars benchmark single-qubit circuits. Characterizing the multi-qubit QFT gates would require data from representative transpiled QFT circuits at the chosen block size. [Gate baseline](../Gate_Baseline.ipynb) · [QFT settings](../QFT_Repeated_Secret.ipynb)
+
 ## QFT block-size comparison
 
 The proposal used two- and four-qubit blocks. The notebook also runs one-, eight-, and sixteen-qubit blocks. Sizes 1–8 send four payload bits and four fresh check bits per attempt, for 16 qubit transmissions counting both legs. The one-qubit layout randomly selects four dedicated check blocks each attempt. A disturbance to a payload block cannot propagate to a separate check block. The eight-qubit layout puts the entire payload and all four checks in one block. The 16-qubit layout puts four payload bits and twelve fresh checks in one block, for 32 qubit transmissions counting both legs. Its results reflect the larger block and the larger check budget together. All layouts use the same link noise and ideal circuit operations. [Notebook settings](../QFT_Repeated_Secret.ipynb)

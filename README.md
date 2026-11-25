@@ -27,7 +27,9 @@ BB84 and QFT start with the Erven reference noise rates. The BB84 notebook offer
 
 The block-size comparison covers 1, 2, 4, 8, and 16 qubits per block. All five settings carry the same four-bit secret. The 16-qubit block uses twelve hidden checks per attempt, compared with four checks at the other sizes. [Comparison plot](results/qft_block_sizes/comparison.png) · [Counts and settings](results/qft_block_sizes/comparison.csv)
 
-To include hardware measurements in the repeated-secret simulation, run the gate baseline with `RUN_MODE = "hardware"`, then set `USE_HARDWARE_BASELINE = True` in the repeated-secret notebook. It reads `results/gate_baseline_hardware.json` to model Bob's measurement errors and recalibrate his alarms. For a local test, run the gate baseline in Aer and point `GATE_BASELINE_FILE` at `results/gate_baseline_aer.json`. [Gate baseline](Gate_Baseline.ipynb) · [Repeated-secret notebook](QFT_Repeated_Secret.ipynb)
+For IBM hardware setup, put your local `apikey.json` beside `qkd_connect.py` in the repo root and run `python qkd_connect.py` to save the account. The gate notebook loads that saved account when `RUN_MODE = "hardware"`. Leave `QPU = None` to choose the least busy operational device available to the account, or enter a backend name to use a specific device. [Account setup script](qkd_connect.py) · [Gate baseline](Gate_Baseline.ipynb)
+
+After a hardware run, set `USE_HARDWARE_BASELINE = True` in the repeated-secret notebook. It reads `results/gate_baseline_hardware.json` to model Bob's measurement errors and recalibrate his alarms. For a local test, run the gate baseline in Aer and point `GATE_BASELINE_FILE` at `results/gate_baseline_aer.json`. [Repeated-secret notebook](QFT_Repeated_Secret.ipynb)
 
 The gate notebook also decodes every known word at the sizes in `QFT_DECODER_WIDTHS`. It shows a computational-basis control and the inverse QFT side by side. The separate `results/qft_decoder_hardware.json` or `results/qft_decoder_aer.json` export preserves the observed words, error rates, and compiled two-qubit operations for each size. [Decoder benchmark](Gate_Baseline.ipynb#bobs-inverse-qft-on-known-words)
 
